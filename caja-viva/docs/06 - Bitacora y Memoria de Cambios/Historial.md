@@ -292,7 +292,7 @@ Cierre funcional del sistema: se completaron los flujos de cierre de caja, fiado
 - **Fixed** — Cobros: pagos parciales/totales actualizan saldo, historial y semáforo; se encola `MOVIMIENTO_COBRO` y `CUENTA_POR_COBRAR`.
 - **Fixed** — Guardián crediticio: semáforo VERDE ≥70, AMARILLO ≥50, ROJO <50; `PARCIAL` cuenta 0.5 en historial; crédito moderado = mín(50% solicitado, 80% promedio).
 - **Fixed** — Inventario: búsqueda insensible a tildes, filtro por categoría, guarda de borrado con stock, ajustes `AJUSTE` a 0 y sincronización de productos/movimientos.
-- **Fixed** — Cierre: efectivo efectivo = ventas efectivo − gastos; `totalTeorico` = efectivo + QR + fiado − gastos; diferencia neutra hasta ingresar efectivo físico.
+- **Fixed** — Cierre: efectivo teórico = ventas efectivo − gastos; `totalTeorico` = efectivo + QR + fiado − gastos; diferencia neutra hasta ingresar efectivo físico.
 - **Fixed** — Moneda entera (RB-001): validaciones y pasos `step=1` en venta, fiado, inventario y cierre; sin decimales.
 - **Fixed** — Backend: `creado_en`/`actualizado_en` inválidos en `CuentaPorCobrar`/`ArqueoCaja`; `gastos_turno` como suma plana.
 - **Fixed** — CORS: `NoDecode` para aceptar orígenes separados por coma o JSON.
@@ -321,6 +321,7 @@ Cierre funcional del sistema: se completaron los flujos de cierre de caja, fiado
 ### 📝 Commits
 - `34f25fc` — feat(caja-viva): cierre de caja, fiados y sync idempotente listos para produccion.
 - `7458121` — fix(backend): pydantic-settings 2.7.1 para `NoDecode` en producción.
+- `0be61f3` — docs(orden-10): cierre funcional, verificación en producción y estado final.
 
 ---
 
