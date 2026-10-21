@@ -17,11 +17,23 @@ export interface Producto {
   actualizado_en: string;
 }
 
+export interface PagoVenta {
+  metodo: 'EFECTIVO' | 'QR' | 'FIADO';
+  monto: number;
+  referencia_qr?: string;
+  /** Cuenta por cobrar creada para este pago a fiado. */
+  cliente_fiado_id?: UUID;
+  cliente_fiado_nombre?: string;
+  cliente_fiado_telefono?: string;
+}
+
 export interface Venta {
   id: UUID;
-  fecha: string; // ISO 8601
-  total: number; // en centésimos
+  fecha: string; // YYYY-MM-DD (hora local)
+  total: number;
   metodo_pago: 'EFECTIVO' | 'QR' | 'FIADO' | 'MIXTO';
+  /** Desglose real de pagos (necesario para el cierre de caja). */
+  pagos?: PagoVenta[];
   estado_sync: 'PENDIENTE' | 'SINCRONIZADO' | 'CONFLICTO';
   client_tx_id: UUID;
   creado_en: string;
@@ -69,7 +81,7 @@ export interface MovimientoCobro {
 
 export interface SyncQueueItem {
   id: UUID;
-  tipo_entidad: 'PRODUCTO' | 'VENTA' | 'MOVIMIENTO_STOCK' | 'CUENTA_POR_COBRAR' | 'MOVIMIENTO_COBRO';
+  tipo_entidad: 'PRODUCTO' | 'VENTA' | 'MOVIMIENTO_STOCK' | 'CUENTA_POR_COBRAR' | 'MOVIMIENTO_COBRO' | 'ARQUEO_CAJA';
   accion: 'CREATE' | 'UPDATE' | 'DELETE';
   entity_id: UUID;
   client_tx_id: UUID;

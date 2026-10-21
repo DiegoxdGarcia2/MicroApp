@@ -1,5 +1,7 @@
-import type { Producto, DetalleVenta, Venta } from '../../db/types';
+import type { Producto, DetalleVenta, Venta, PagoVenta } from '../../db/types';
 import type { UUID } from '../../db/types';
+import { todayISO } from '../../db/schema';
+import { parseFechaLocal } from '../../utils/dateUtils';
 
 // Re-export types needed by other modules
 export type { Producto, DetalleVenta, Venta, UUID };
@@ -8,7 +10,10 @@ export interface PagoCreate {
   metodo: 'EFECTIVO' | 'QR' | 'FIADO';
   monto: number;
   referencia_qr?: string;
+  /** Cuenta existente; si se omite, se crea una cuenta nueva con nombre/telefono. */
   cliente_fiado_id?: UUID;
+  cliente_fiado_nombre?: string;
+  cliente_fiado_telefono?: string;
 }
 
 export interface CartItem {
@@ -42,29 +47,54 @@ export function calculateChange(efectivoEntregado: number, total: number): numbe
   return efectivoEntregado - total;
 }
 
-export function validatePayment(total: number, pagos: Array<{ metodo: string; monto: number; cliente_fiado_id?: string }>): PaymentValidation {
+export function validatePayment(
+  total: number,
+  pagos: Array<{
+    metodo: string;
+    monto: number;
+    cliente_fiado_id?: string;
+    cliente_fiado_nombre?: string;
+    cliente_fiado_telefono?: string;
+  }>,
+): PaymentValidation {
   const totalPagos = pagos.reduce((sum, p) => sum + p.monto, 0);
   const diferencia = totalPagos - total;
 
-  if (diferencia < 0) {
+  // Tolerancia de 1 centavo para evitar errores de punto flotante.
+  if (diferencia < -0.01) {
     return { valid: false, diferencia, error: `Faltan ${formatBs(Math.abs(diferencia))} para completar el pago` };
   }
-  if (diferencia > 0) {
+  if (diferencia > 0.01) {
     return { valid: false, diferencia, error: `Pago excede el total en ${formatBs(diferencia)}` };
   }
+  if (pagos.some(p => p.monto < 0)) {
+    return { valid: false, diferencia: 0, error: 'Los montos no pueden ser negativos' };
+  }
+  if (pagos.some(p => !Number.isInteger(p.monto))) {
+    return { valid: false, diferencia: 0, error: 'Los montos deben ser enteros de Bolivianos (sin decimales)' };
+  }
 
-  // Validar que los pagos FIADO tengan cliente_fiado_id
+  // Un pago a fiado necesita un cliente identificable (cuenta o nombre+telefono).
   for (const pago of pagos) {
-    if (pago.metodo === 'FIADO' && !pago.cliente_fiado_id) {
-      return { 
-        valid: false, 
-        diferencia: 0, 
-        error: 'Los pagos a FIADO requieren seleccionar un cliente' 
-      };
+    if (pago.metodo === 'FIADO') {
+      const tieneCliente = Boolean(pago.cliente_fiado_id) ||
+        (Boolean(pago.cliente_fiado_nombre?.trim()) && Boolean(pago.cliente_fiado_telefono?.trim()));
+      if (!tieneCliente) {
+        return {
+          valid: false,
+          diferencia: 0,
+          error: 'Los pagos a FIADO requieren seleccionar un cliente',
+        };
+      }
     }
   }
 
   return { valid: true, diferencia: 0 };
+}
+
+/** Normaliza texto para busquedas sin distinguir mayusculas ni tildes. */
+export function normalizarTexto(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 export function filterProducts(
@@ -75,11 +105,11 @@ export function filterProducts(
   let results = products;
 
   if (query.trim()) {
-    const lowerQuery = query.toLowerCase();
+    const lowerQuery = normalizarTexto(query.trim());
     results = results.filter(p => 
-      p.nombre.toLowerCase().includes(lowerQuery) ||
-      p.codigo_barras?.toLowerCase().includes(lowerQuery) ||
-      p.categoria?.toLowerCase().includes(lowerQuery)
+      normalizarTexto(p.nombre).includes(lowerQuery) ||
+      (p.codigo_barras ? normalizarTexto(p.codigo_barras).includes(lowerQuery) : false) ||
+      (p.categoria ? normalizarTexto(p.categoria).includes(lowerQuery) : false)
     );
   }
 
@@ -137,13 +167,15 @@ export function generateTicketText(
   productos: Producto[],
   negocioNombre: string
 ): string {
-  const fecha = new Date(venta.fecha).toLocaleString('es-BO', {
+  const fechaVenta = parseFechaLocal(venta.fecha);
+  const horaVenta = new Date(venta.creado_en);
+  const fecha = `${fechaVenta.toLocaleDateString('es-BO', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  })} ${Number.isNaN(horaVenta.getTime())
+    ? ''
+    : horaVenta.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })}`.trim();
 
   const lineas = detalles.map(detalle => {
     const producto = productos.find(p => p.id === detalle.producto_id);
@@ -180,7 +212,7 @@ export function generateWhatsAppUrl(phone: string, message: string): string {
 
 export function createVentaPayload(
   items: CartItem[],
-  pagos: Array<{ metodo: string; monto: number; cliente_fiado_id?: string }>,
+  pagos: PagoCreate[],
   clientTxId: string
 ): { venta: Omit<Venta, 'id' | 'creado_en' | 'sincronizado_en'>; detalles: Omit<DetalleVenta, 'id'>[] } {
   const { total } = calculateTotals(items);
@@ -188,10 +220,20 @@ export function createVentaPayload(
     ? pagos[0].metodo 
     : 'MIXTO') as Venta['metodo_pago'];
 
+  const pagosVenta: PagoVenta[] = pagos.map(p => ({
+    metodo: p.metodo,
+    monto: p.monto,
+    referencia_qr: p.referencia_qr,
+    cliente_fiado_id: p.cliente_fiado_id,
+    cliente_fiado_nombre: p.cliente_fiado_nombre,
+    cliente_fiado_telefono: p.cliente_fiado_telefono,
+  }));
+
   const venta = {
-    fecha: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+    fecha: todayISO(), // YYYY-MM-DD en hora local
     total,
     metodo_pago: metodoPago,
+    pagos: pagosVenta,
     estado_sync: 'PENDIENTE' as const,
     client_tx_id: clientTxId,
   };

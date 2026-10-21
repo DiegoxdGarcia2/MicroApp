@@ -10,7 +10,7 @@ import {
 } from './fiadosUtils';
 import { CuentaPorCobrar, MovimientoCobro } from '../../db/types';
 import { generateId, nowISO, todayISO } from '../../db/schema';
-import { cuentaPorCobrarRepository, movimientoCobroRepository } from '../../db/repositories';
+import { cuentaPorCobrarRepository, movimientoCobroRepository, syncQueueRepository } from '../../db/repositories';
 
 describe('Fiados - Cuentas por Cobrar y Recordatorios WhatsApp', () => {
   beforeEach(async () => {

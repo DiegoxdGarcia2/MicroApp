@@ -5,6 +5,7 @@ import type {
   ArqueoCaja, UUID 
 } from './types';
 import { STORE_NAMES, DB_NAME, DB_VERSION, generateUUID } from './types';
+import { toLocalDateISO } from '../utils/dateUtils';
 
 interface CajaVivaDB extends DBSchema {
   productos: {
@@ -147,5 +148,7 @@ export function nowISO(): string {
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  // Fecha local, no UTC: en Bolivia (UTC-4) `toISOString()` cambia de dia
+  // a partir de las 20:00 y arruinaria ventas/cierres de caja.
+  return toLocalDateISO();
 }

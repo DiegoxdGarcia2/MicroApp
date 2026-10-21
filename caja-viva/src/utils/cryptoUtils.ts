@@ -32,7 +32,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
-    false,
+    true, // extractable: generateKeyHash exporta la clave para verificar la contraseña
     ['encrypt', 'decrypt']
   );
 }
@@ -48,9 +48,29 @@ async function generateKeyHash(key: CryptoKey): Promise<string> {
 }
 
 /**
+ * Comprueba si el entorno puede comprimir imágenes (navegador con canvas).
+ * En jsdom/Node no hay canvas: se devuelve el blob original.
+ */
+function puedeComprimirImagen(): boolean {
+  if (typeof document === 'undefined' || typeof Image === 'undefined' || typeof URL === 'undefined'
+      || typeof URL.createObjectURL !== 'function') {
+    return false;
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    if (typeof canvas.toBlob !== 'function') return false;
+    return typeof canvas.getContext === 'function' && canvas.getContext('2d') !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Comprime una imagen antes de encriptar (reduce tamaño manteniendo calidad)
  */
 async function compressImage(blob: Blob, maxWidth: number = 800, quality: number = 0.7): Promise<Blob> {
+  if (!puedeComprimirImagen()) return blob;
+
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
@@ -119,12 +139,14 @@ export async function encryptCIPhoto(
     // 5. Generar IV aleatorio para AES-GCM
     const iv = crypto.getRandomValues(new Uint8Array(12));
     
-    // 6. Encriptar datos
-    const encryptedData = await crypto.subtle.encrypt(
+    // 6. Encriptar datos (copiamos a un buffer del realm actual: en Node/jsdom
+    //    el ArrayBuffer devuelto por WebCrypto puede pertenecer a otro realm).
+    const encryptedRaw = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
       key,
       imageData
     );
+    const encryptedData = new Uint8Array(encryptedRaw).buffer as ArrayBuffer;
     
     // 7. Generar hash de la clave para verificación
     const keyHash = await generateKeyHash(key);

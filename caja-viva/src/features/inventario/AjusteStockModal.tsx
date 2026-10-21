@@ -49,8 +49,10 @@ export function AjusteStockModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (cantidad <= 0) {
-      setError('La cantidad debe ser mayor a 0');
+    if (tipo === 'AJUSTE' ? cantidad < 0 : cantidad <= 0) {
+      setError(tipo === 'AJUSTE'
+        ? 'El stock final no puede ser negativo'
+        : 'La cantidad debe ser mayor a 0');
       return;
     }
     
@@ -140,22 +142,29 @@ export function AjusteStockModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-primary mb-1">Cantidad <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-primary mb-1">
+                  {tipo === 'AJUSTE' ? 'Stock final' : 'Cantidad'} <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">unid.</span>
                   <input
                     type="number"
                     value={cantidad}
                     onChange={(e) => setCantidad(parseInt(e.target.value) || 0)}
-                    min="1"
+                    min={tipo === 'AJUSTE' ? '0' : '1'}
                     step="1"
                     className="input-field pl-8 text-right"
-                    placeholder="Cantidad"
+                    placeholder={tipo === 'AJUSTE' ? 'Stock final' : 'Cantidad'}
                     required
                     disabled={cargando}
-                    aria-label="Cantidad a ajustar"
+                    aria-label={tipo === 'AJUSTE' ? 'Stock final' : 'Cantidad a ajustar'}
                   />
                 </div>
+                {tipo === 'AJUSTE' && (
+                  <p className="text-xs text-muted mt-1">
+                    El stock del producto quedará exactamente en esta cantidad (inventario físico).
+                  </p>
+                )}
               </div>
 
               <div>

@@ -54,6 +54,11 @@ export function calculateInventoryValue(productos: Array<{ precio_venta: number;
   return productos.reduce((sum, p) => sum + (p[campo] * p.stock_actual), 0);
 }
 
+/** Normaliza texto para búsquedas sin distinguir mayúsculas ni tildes. */
+function normalizar(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 /**
  * Filtra productos por búsqueda y categoría
  */
@@ -65,19 +70,19 @@ export function filterProducts(
 ): Array<{ nombre: string; codigo_barras?: string | null; categoria?: string | null; stock_actual: number; stock_minimo: number }> {
   let resultados = [...productos];
 
-  // Filtrar por búsqueda
+  // Filtrar por búsqueda (sin distinguir tildes: "azucar" encuentra "Azúcar")
   if (query.trim()) {
-    const lowerQuery = query.toLowerCase();
+    const lowerQuery = normalizar(query.trim());
     resultados = resultados.filter(p => 
-      p.nombre.toLowerCase().includes(lowerQuery) ||
-      p.codigo_barras?.toLowerCase().includes(lowerQuery) ||
-      p.categoria?.toLowerCase().includes(lowerQuery)
+      normalizar(p.nombre).includes(lowerQuery) ||
+      (p.codigo_barras ? normalizar(p.codigo_barras).includes(lowerQuery) : false) ||
+      (p.categoria ? normalizar(p.categoria).includes(lowerQuery) : false)
     );
   }
 
-  // Filtrar por categoría
-  if (categoria && categoria !== 'Todos') {
-    resultados = resultados.filter(p => p.categoria === categoria);
+  // Filtrar por categoría ("Todas"/"Todos" = sin filtro)
+  if (categoria && categoria !== 'Todos' && categoria !== 'Todas') {
+    resultados = resultados.filter(p => normalizar(p.categoria ?? '') === normalizar(categoria));
   }
 
   // Filtrar por estado de stock
@@ -140,18 +145,26 @@ export function validateProduct(producto: Partial<{
 
   if (producto.precio_venta === undefined || producto.precio_venta < 0) {
     errors.push('El precio de venta debe ser un número positivo');
+  } else if (!Number.isInteger(producto.precio_venta)) {
+    errors.push('El precio de venta debe ser un entero de Bolivianos');
   }
 
   if (producto.costo === undefined || producto.costo < 0) {
     errors.push('El costo debe ser un número positivo');
+  } else if (!Number.isInteger(producto.costo)) {
+    errors.push('El costo debe ser un entero de Bolivianos');
   }
 
   if (producto.stock_actual === undefined || producto.stock_actual < 0) {
     errors.push('El stock actual no puede ser negativo');
+  } else if (!Number.isInteger(producto.stock_actual)) {
+    errors.push('El stock actual debe ser un número entero');
   }
 
   if (producto.stock_minimo === undefined || producto.stock_minimo < 0) {
     errors.push('El stock mínimo no puede ser negativo');
+  } else if (!Number.isInteger(producto.stock_minimo)) {
+    errors.push('El stock mínimo debe ser un número entero');
   }
 
   if (producto.codigo_barras && producto.codigo_barras.length > 50) {

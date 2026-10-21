@@ -1,16 +1,21 @@
 import { useCallback, useState } from 'react';
 import { generateId, nowISO } from '../db/schema';
+import { addDaysLocal } from '../utils/dateUtils';
 import { 
   productoRepository, 
   ventaRepository, 
   detalleVentaRepository,
+  cuentaPorCobrarRepository,
   syncQueueRepository 
 } from '../db/repositories';
+import type { CuentaPorCobrar } from '../db/types';
 import type { 
   Producto, Venta, DetalleVenta, PagoCreate,
   CartItem, Totals 
 } from '../features/venta/ventaUtils';
 import { createVentaPayload } from '../features/venta/ventaUtils';
+
+const TELEFONO_BOLIVIANO = /^\+591[67]\d{7}$/;
 
 export interface UseVentaRapidaReturn {
   // Estado
@@ -93,14 +98,18 @@ export function useVentaRapida(): UseVentaRapidaReturn {
     // Validar pagos
     const { total } = totales;
     const totalPagos = pagos.reduce((sum, p) => sum + p.monto, 0);
-    if (totalPagos !== total) {
+    if (Math.abs(totalPagos - total) > 0.01) {
       return { success: false, error: `El total de pagos (${totalPagos}) no coincide con el total de la venta (${total})` };
     }
 
-    // Validar FIADO
+    // Validar FIADO: debe tener cliente y telefono para crear la cuenta.
     for (const pago of pagos) {
-      if (pago.metodo === 'FIADO' && !pago.cliente_fiado_id) {
-        return { success: false, error: 'Los pagos a FIADO requieren seleccionar un cliente' };
+      if (pago.metodo !== 'FIADO') continue;
+      if (!pago.cliente_fiado_nombre?.trim()) {
+        return { success: false, error: 'Los pagos a FIADO requieren el nombre del cliente' };
+      }
+      if (!pago.cliente_fiado_telefono || !TELEFONO_BOLIVIANO.test(pago.cliente_fiado_telefono.trim())) {
+        return { success: false, error: 'Teléfono inválido: usa el formato +5917XXXXXXX o +5916XXXXXXX' };
       }
     }
 
@@ -110,17 +119,53 @@ export function useVentaRapida(): UseVentaRapidaReturn {
     try {
       const clientTxId = generateId();
       const { venta, detalles } = createVentaPayload(carrito, pagos, clientTxId);
+      const ventaId = generateId();
+      const now = nowISO();
 
-      // 1. Guardar venta en IndexedDB
+      // 1. Crear una cuenta por cobrar por cada pago a fiado.
+      //    Es una cuenta nueva por venta (US-003), con vencimiento a 15 dias.
+      const pagosConCuenta = await Promise.all(pagos.map(async (pago) => {
+        if (pago.metodo !== 'FIADO') return pago;
+
+        const cuenta: CuentaPorCobrar = {
+          id: generateId(),
+          cliente_nombre: pago.cliente_fiado_nombre!.trim(),
+          cliente_telefono: pago.cliente_fiado_telefono!.trim(),
+          monto_total: pago.monto,
+          saldo_pendiente: pago.monto,
+          fecha_vencimiento: addDaysLocal(15),
+          estado: 'PENDIENTE',
+          creado_en: now,
+          actualizado_en: now,
+        };
+        await cuentaPorCobrarRepository.create(cuenta);
+
+        return {
+          ...pago,
+          cliente_fiado_id: cuenta.id,
+          cliente_fiado_nombre: cuenta.cliente_nombre,
+          cliente_fiado_telefono: cuenta.cliente_telefono,
+        };
+      }));
+
+      // 2. Guardar la venta con el desglose real de pagos (para el cierre).
       const ventaCompleta: Venta = {
         ...venta,
-        id: generateId(),
-        creado_en: nowISO(),
+        id: ventaId,
+        pagos: pagosConCuenta.map(p => ({
+          metodo: p.metodo,
+          monto: p.monto,
+          referencia_qr: p.referencia_qr,
+          cliente_fiado_id: p.cliente_fiado_id,
+          cliente_fiado_nombre: p.cliente_fiado_nombre,
+          cliente_fiado_telefono: p.cliente_fiado_telefono,
+        })),
+        creado_en: now,
         sincronizado_en: null,
       };
       await ventaRepository.create(ventaCompleta);
 
-      // 2. Guardar detalles
+      // 3. Guardar detalles
       const detallesCompletos: DetalleVenta[] = detalles.map(d => ({
         ...d,
         id: generateId(),
@@ -128,12 +173,12 @@ export function useVentaRapida(): UseVentaRapidaReturn {
       }));
       await detalleVentaRepository.createBatch(detallesCompletos);
 
-      // 3. Descontar stock de cada producto
+      // 4. Descontar stock de cada producto (el backend lo hara al sincronizar la venta)
       for (const item of carrito) {
         await productoRepository.updateStock(item.producto.id, -item.cantidad);
       }
 
-      // 4. Encolar en sync_queue
+      // 5. Encolar la venta en sync_queue
       await syncQueueRepository.enqueue({
         tipo_entidad: 'VENTA',
         accion: 'CREATE',
@@ -143,32 +188,13 @@ export function useVentaRapida(): UseVentaRapidaReturn {
           venta: ventaCompleta,
           detalles: detallesCompletos,
         },
-        timestamp: nowISO(),
+        timestamp: now,
       });
-
-      // 5. Si hay pagos FIADO, crear/en actualizar cuentas por cobrar
-      for (const pago of pagos) {
-        if (pago.metodo === 'FIADO' && pago.cliente_fiado_id) {
-          await syncQueueRepository.enqueue({
-            tipo_entidad: 'MOVIMIENTO_COBRO',
-            accion: 'CREATE',
-            entity_id: generateId(),
-            client_tx_id: generateId(),
-            payload: {
-              cuenta_cobrar_id: pago.cliente_fiado_id,
-              monto: pago.monto,
-              metodo: 'FIADO',
-              fecha: new Date().toISOString(),
-              notas: `Venta #${ventaCompleta.id.slice(0, 8)}`,
-            },
-            timestamp: nowISO(),
-          });
-        }
-      }
 
       // Éxito
       setVentaExitosa(ventaCompleta);
-      limpiarCarrito();
+      // No usar limpiarCarrito(): resetea ventaExitosa y oculta la pantalla de exito.
+      setCarrito([]);
       
       return { success: true, venta: ventaCompleta };
 

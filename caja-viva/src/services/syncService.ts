@@ -17,6 +17,7 @@ export interface SyncResult {
   ok: boolean;
   sincronizados: number;
   duplicados: number;
+  errores: number;
   conflictos: number;
   error?: string;
   health?: BackendHealth | null;
@@ -77,6 +78,7 @@ interface VentaPayload {
   fecha?: string;
   total?: number;
   metodo_pago?: string;
+  pagos?: Array<{ metodo: string; monto: number }>;
 }
 
 interface DetallePayload {
@@ -117,7 +119,9 @@ export function toBackendTransaction(item: SyncQueueItem): BackendTransaction {
         cantidad: d.cantidad,
         precio_unitario: d.precio_unitario,
       })),
-      pagos: [{ metodo: venta.metodo_pago ?? 'EFECTIVO', monto: venta.total ?? 0 }],
+      pagos: venta.pagos && venta.pagos.length > 0
+        ? venta.pagos.map((p) => ({ metodo: p.metodo, monto: p.monto }))
+        : [{ metodo: venta.metodo_pago ?? 'EFECTIVO', monto: venta.total ?? 0 }],
     },
   };
 }
@@ -133,6 +137,7 @@ export async function syncNow(): Promise<SyncResult> {
       ok: false,
       sincronizados: 0,
       duplicados: 0,
+      errores: 0,
       conflictos: 0,
       error: 'Backend no configurado (VITE_API_URL)',
     };
@@ -144,18 +149,26 @@ export async function syncNow(): Promise<SyncResult> {
       ok: false,
       sincronizados: 0,
       duplicados: 0,
+      errores: 0,
       conflictos: 0,
       error: 'Sin conexion con el servidor',
       health: null,
     };
   }
 
-  const pendientes = await syncQueueRepository.getPendientes(100);
+  const pendientesNuevos = await syncQueueRepository.getPendientes(100);
+  const reintentos = await syncQueueRepository.getReintentables(Math.max(0, 100 - pendientesNuevos.length));
+  // Orden cronologico global: un PRODUCTO fallido debe reintentarse antes que
+  // la VENTA posterior que depende de el.
+  const pendientes = [...pendientesNuevos, ...reintentos].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
   if (pendientes.length === 0) {
     return {
       ok: true,
       sincronizados: 0,
       duplicados: 0,
+      errores: 0,
       conflictos: 0,
       health,
       sinPendientes: true,
@@ -185,6 +198,7 @@ export async function syncNow(): Promise<SyncResult> {
         ok: false,
         sincronizados: 0,
         duplicados: 0,
+        errores: pendientes.length,
         conflictos: 0,
         error: detalle,
         health,
@@ -195,16 +209,48 @@ export async function syncNow(): Promise<SyncResult> {
       sincronizados?: number;
       duplicados?: number;
       conflictos?: unknown[];
+      resultados?: Array<{
+        client_transaction_id: string;
+        entity_id: string;
+        status: 'OK' | 'DUPLICADO' | 'CONFLICTO';
+        error?: string | null;
+      }>;
     };
 
-    await Promise.all(pendientes.map((p) => syncQueueRepository.markCompletado(p.id)));
+    const porTransaccion = new Map(
+      (data.resultados ?? []).map((r) => [r.client_transaction_id, r]),
+    );
+
+    let sincronizados = 0;
+    let duplicados = 0;
+    let errores = 0;
+
+    for (const item of pendientes) {
+      const resultado = porTransaccion.get(item.client_tx_id);
+      // Backend antiguo sin `resultados`: asumimos que el lote fue aceptado.
+      if (!resultado) {
+        await syncQueueRepository.markCompletado(item.id);
+        sincronizados += 1;
+        continue;
+      }
+      if (resultado.status === 'CONFLICTO') {
+        await syncQueueRepository.markError(item.id, resultado.error ?? 'Conflicto al sincronizar');
+        errores += 1;
+      } else {
+        await syncQueueRepository.markCompletado(item.id);
+        if (resultado.status === 'DUPLICADO') duplicados += 1;
+        else sincronizados += 1;
+      }
+    }
 
     return {
-      ok: true,
-      sincronizados: data.sincronizados ?? pendientes.length,
-      duplicados: data.duplicados ?? 0,
-      conflictos: data.conflictos?.length ?? 0,
+      ok: errores === 0,
+      sincronizados,
+      duplicados,
+      errores,
+      conflictos: data.conflictos?.length ?? errores,
       health,
+      error: errores > 0 ? `${errores} movimiento(s) no se pudieron sincronizar` : undefined,
     };
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : 'Error de red';
@@ -213,6 +259,7 @@ export async function syncNow(): Promise<SyncResult> {
       ok: false,
       sincronizados: 0,
       duplicados: 0,
+      errores: pendientes.length,
       conflictos: 0,
       error: mensaje,
       health,

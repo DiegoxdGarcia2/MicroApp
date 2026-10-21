@@ -1,5 +1,7 @@
 import type { CuentaPorCobrar, MovimientoCobro } from '../../db/types';
 import { generateWhatsAppUrl } from '../venta/ventaUtils';
+import { parseFechaLocal } from '../../utils/dateUtils';
+import { todayISO } from '../../db/schema';
 
 export interface PaymentResult {
   cuenta: CuentaPorCobrar;
@@ -72,7 +74,7 @@ export function getAccountStatus(cuenta: {
 
   // Vencida tiene prioridad sobre PARCIAL: si la fecha pasó y aún debe, está vencida
   if (cuenta.fecha_vencimiento) {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = todayISO();
     if (cuenta.fecha_vencimiento < hoy && cuenta.saldo_pendiente > 0) {
       return 'VENCIDO';
     }
@@ -91,7 +93,7 @@ export function generatePaymentReminder(cuenta: {
   saldo_pendiente: number; 
   fecha_vencimiento: string 
 }): string {
-  const fechaFormateada = new Date(cuenta.fecha_vencimiento).toLocaleDateString('es-BO', {
+  const fechaFormateada = parseFechaLocal(cuenta.fecha_vencimiento).toLocaleDateString('es-BO', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -104,9 +106,9 @@ export function generatePaymentReminder(cuenta: {
 Solo un recordatorio amable: tienes un saldo pendiente de ${montoFormateado} con vencimiento el ${fechaFormateada}.
 
 No te preocupes, sabemos que a veces se nos pasa. Puedes pagar cuando te sea cómodo:
-💵 Efectivo
-📱 QR / Transferencia
-🏦 Transferencia bancaria
+💵 EFECTIVO
+📱 QR
+🏦 TRANSFERENCIA
 
 Si ya pagaste, por favor avísanos para actualizar. ¡Gracias por tu confianza!
 
@@ -157,11 +159,13 @@ export function validateCuentaPorCobrar(cuenta: {
   // Validar formato de teléfono boliviano
   const phoneRegex = /^\+591[67]\d{7}$/;
   if (!cuenta.cliente_telefono || !phoneRegex.test(cuenta.cliente_telefono)) {
-    errors.push('Teléfono inválido: debe ser formato boliviano +591[67]XXXXXXX');
+    errors.push('teléfono inválido: debe ser formato boliviano +591[67]XXXXXXX');
   }
 
   if (cuenta.monto_total === undefined || cuenta.monto_total <= 0) {
     errors.push('El monto total debe ser un número positivo');
+  } else if (!Number.isInteger(cuenta.monto_total)) {
+    errors.push('El monto total debe ser un número entero de Bolivianos (sin decimales)');
   }
 
   if (cuenta.saldo_pendiente !== undefined && cuenta.saldo_pendiente < 0) {
@@ -169,7 +173,7 @@ export function validateCuentaPorCobrar(cuenta: {
   }
 
   if (cuenta.fecha_vencimiento) {
-    const fecha = new Date(cuenta.fecha_vencimiento);
+    const fecha = parseFechaLocal(cuenta.fecha_vencimiento);
     if (isNaN(fecha.getTime())) {
       errors.push('Fecha de vencimiento inválida');
     }

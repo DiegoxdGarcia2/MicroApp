@@ -1,5 +1,7 @@
-import type { ArqueoCaja, GastoTurno } from '../../db/types';
+import type { ArqueoCaja, GastoTurno, PagoVenta } from '../../db/types';
 import { generateWhatsAppUrl } from '../venta/ventaUtils';
+import { parseFechaLocal } from '../../utils/dateUtils';
+import { todayISO } from '../../db/schema';
 
 /**
  * Formatea un monto en Bolivianos
@@ -14,6 +16,13 @@ export interface ArqueoTotals {
   qr: number;
   fiado: number;
   totalVentas: number;
+  cantidadVentas: number;
+}
+
+export interface CierreTotals extends ArqueoTotals {
+  gastos: number;
+  efectivoTeorico: number;
+  totalTeorico: number;
 }
 
 export interface ArqueoValidation {
@@ -22,13 +31,34 @@ export interface ArqueoValidation {
 }
 
 /**
- * Calcula los totales de un arqueo a partir de las ventas
+ * Calcula los totales de un arqueo a partir de las ventas.
+ *
+ * Si la venta guarda el desglose `pagos` (ventas nuevas) se usa ese desglose;
+ * para ventas antiguas se cae al `metodo_pago` unico.
  */
-export function calculateArqueoTotals(ventas: Array<{ metodo_pago: string; total: number }>): ArqueoTotals {
-  const totals: ArqueoTotals = { efectivo: 0, qr: 0, fiado: 0, totalVentas: 0 };
+export function calculateArqueoTotals(
+  ventas: Array<{ metodo_pago: string; total: number; pagos?: PagoVenta[] }>,
+): ArqueoTotals {
+  const totals: ArqueoTotals = {
+    efectivo: 0,
+    qr: 0,
+    fiado: 0,
+    totalVentas: 0,
+    cantidadVentas: ventas.length,
+  };
 
   for (const venta of ventas) {
     totals.totalVentas += venta.total;
+
+    if (venta.pagos && venta.pagos.length > 0) {
+      for (const pago of venta.pagos) {
+        if (pago.metodo === 'EFECTIVO') totals.efectivo += pago.monto;
+        else if (pago.metodo === 'QR') totals.qr += pago.monto;
+        else if (pago.metodo === 'FIADO') totals.fiado += pago.monto;
+      }
+      continue;
+    }
+
     switch (venta.metodo_pago) {
       case 'EFECTIVO':
         totals.efectivo += venta.total;
@@ -40,12 +70,77 @@ export function calculateArqueoTotals(ventas: Array<{ metodo_pago: string; total
         totals.fiado += venta.total;
         break;
       case 'MIXTO':
-        // Para ventas mixtas, asumimos que el total ya está desglosado en otras ventas
+        // Venta antigua sin desglose: no se puede conciliar por metodo.
         break;
     }
   }
 
   return totals;
+}
+
+/**
+ * Totales completos del cierre: ventas por metodo, gastos y efectivo esperado.
+ */
+export function calculateCierreTotals(
+  ventas: Array<{ metodo_pago: string; total: number; pagos?: PagoVenta[] }>,
+  gastos: GastoTurno[],
+): CierreTotals {
+  const totales = calculateArqueoTotals(ventas);
+  const gastosTotal = calculateGastosTurno(gastos);
+  return {
+    ...totales,
+    gastos: gastosTotal,
+    efectivoTeorico: Math.max(0, totales.efectivo - gastosTotal),
+    totalTeorico: totales.efectivo + totales.qr + totales.fiado - gastosTotal,
+  };
+}
+
+export interface DiferenciaInfo {
+  nivel: 'CUADRADO' | 'SOBRANTE' | 'FALTANTE' | 'DESCUADRE';
+  mensaje: string;
+  color: 'verde' | 'ambar' | 'rojo';
+  requiereRevision: boolean;
+}
+
+/**
+ * Clasifica la diferencia de caja segun el umbral configurable.
+ * - Cuadre exacto: verde.
+ * - Sobrante: verde (segun especificacion US-004).
+ * - Faltante dentro del umbral: ambar.
+ * - Faltante mayor al umbral: rojo (DESCUADRE) y requiere revision.
+ */
+export function getDiferenciaInfo(diferencia: number, umbral = 5): DiferenciaInfo {
+  if (Math.abs(diferencia) < 0.01) {
+    return {
+      nivel: 'CUADRADO',
+      mensaje: 'CUADRE EXACTO: la caja coincide.',
+      color: 'verde',
+      requiereRevision: false,
+    };
+  }
+  if (diferencia > 0) {
+    return {
+      nivel: 'SOBRANTE',
+      mensaje: `SOBRANTE: +${formatBs(diferencia)}. Verifica si falta registrar una venta.`,
+      color: 'verde',
+      requiereRevision: false,
+    };
+  }
+  const faltante = Math.abs(diferencia);
+  if (faltante <= umbral) {
+    return {
+      nivel: 'FALTANTE',
+      mensaje: `FALTANTE: -${formatBs(faltante)} (dentro del umbral de ${formatBs(umbral)}).`,
+      color: 'ambar',
+      requiereRevision: false,
+    };
+  }
+  return {
+    nivel: 'DESCUADRE',
+    mensaje: `DESCUADRE: -${formatBs(faltante)} - Revisar ventas anuladas / cambio mal dado (umbral ${formatBs(umbral)}).`,
+    color: 'rojo',
+    requiereRevision: true,
+  };
 }
 
 /**
@@ -87,15 +182,19 @@ export function validateArqueo(arqueo: Partial<{
   ventas_efectivo: number;
   ventas_qr: number;
   ventas_fiado: number;
-  gastos_turno: number;
+  // El modelo persistido guarda el detalle; los tests/compatibilidad usan el total.
+  gastos_turno: number | GastoTurno[];
   total_teorico: number;
   diferencia: number;
   estado: string;
 }>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+  const gastosTotal = Array.isArray(arqueo.gastos_turno)
+    ? calculateGastosTurno(arqueo.gastos_turno)
+    : arqueo.gastos_turno;
 
-  // Validar fecha (debe ser hoy)
-  const hoy = new Date().toISOString().split('T')[0];
+  // Validar fecha (debe ser hoy, en hora local)
+  const hoy = todayISO();
   if (!arqueo.fecha || arqueo.fecha !== hoy) {
     errors.push('La fecha debe ser la de hoy');
   }
@@ -116,8 +215,14 @@ export function validateArqueo(arqueo: Partial<{
     const value = (arqueo as Record<string, unknown>)[field];
     if (value === undefined || value === null) {
       errors.push(`Campo requerido faltante: ${label}`);
-    } else if (typeof value !== 'number' || isNaN(value)) {
-      errors.push(`Campo inválido: ${label} debe ser un número`);
+    } else if (field === 'gastos_turno' && Array.isArray(value)) {
+      // El detalle de gastos es válido si cada item tiene un monto numérico.
+      const invalido = value.some(
+        (gasto) => typeof gasto?.monto !== 'number' || !Number.isInteger(gasto.monto),
+      );
+      if (invalido) errors.push(`Campo inválido: ${label} contiene montos inválidos`);
+    } else if (typeof value !== 'number' || !Number.isInteger(value)) {
+      errors.push(`Campo inválido: ${label} debe ser un número entero de Bolivianos`);
     }
   }
 
@@ -126,21 +231,21 @@ export function validateArqueo(arqueo: Partial<{
     errors.push('Estado inválido: debe ser ABIERTO o CERRADO');
   }
 
-  // Validar consistencia numérica
+  // Validar consistencia numérica (gastos puede venir como total o como detalle)
   if (
     arqueo.efectivo_teorico !== undefined &&
     arqueo.ventas_efectivo !== undefined &&
     arqueo.ventas_qr !== undefined &&
     arqueo.ventas_fiado !== undefined &&
-    arqueo.gastos_turno !== undefined
+    gastosTotal !== undefined
   ) {
-    const totalCalculado = 
+    const totalCalculado =
       (arqueo.ventas_efectivo || 0) +
       (arqueo.ventas_qr || 0) +
       (arqueo.ventas_fiado || 0) -
-      (arqueo.gastos_turno || 0);
+      gastosTotal;
 
-    if (arqueo.total_teorico !== undefined && 
+    if (arqueo.total_teorico !== undefined &&
         Math.abs(totalCalculado - arqueo.total_teorico) > 1) {
       errors.push(`Total teórico inconsistente: calculado ${totalCalculado}, registrado ${arqueo.total_teorico}`);
     }
@@ -153,7 +258,7 @@ export function validateArqueo(arqueo: Partial<{
 }
 
 export function formatArqueoReport(arqueo: ArqueoCaja, negocioNombre: string): string {
-  const fechaFormateada = new Date(arqueo.fecha).toLocaleDateString('es-BO', {
+  const fechaFormateada = parseFechaLocal(arqueo.fecha).toLocaleDateString('es-BO', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -186,7 +291,7 @@ ${arqueo.gastos_turno.length > 0
     : '  (Sin gastos registrados)'}
 
 ${'='.repeat(38)}
-Total en Caja: ${formatBs(arqueo.efectivo_fisico_contado - arqueo.gastos_turno.reduce((s: number, g: GastoTurno) => s + g.monto, 0))}
+Total contado: ${formatBs(arqueo.efectivo_fisico_contado)}
 ${'='.repeat(38)}
 Cierre: ${new Date(arqueo.cerrado_en || Date.now()).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })}
 `.trim();

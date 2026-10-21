@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { CartItem, PaymentValidation, PagoCreate } from './ventaUtils';
 import { formatBs, validatePayment } from './ventaUtils';
 import { ThinkingOrb } from '../../components/common/ThinkingOrb';
+import { cuentaPorCobrarRepository } from '../../db/repositories';
 
 // SVG Icons as separate components
 function EfectivoIcon({ className = 'w-5 h-5' }: { className?: string }) {
@@ -82,6 +83,18 @@ interface CarritoPanelProps {
 
 type MetodoPago = 'EFECTIVO' | 'QR' | 'FIADO';
 
+interface ClienteFiado {
+  nombre: string;
+  telefono: string;
+}
+
+interface PagoState {
+  metodo: MetodoPago;
+  monto: number;
+  cliente_fiado_nombre?: string;
+  cliente_fiado_telefono?: string;
+}
+
 const METODOS_PAGO: { value: MetodoPago; label: string; Icon: React.FC<{ className?: string }> }[] = [
   { value: 'EFECTIVO', label: 'Efectivo', Icon: EfectivoIcon },
   { value: 'QR', label: 'QR / Transferencia', Icon: QRIcon },
@@ -94,9 +107,11 @@ interface PagoFormProps {
   onMontoChange: (monto: number) => void;
   onRemove: () => void;
   total: number;
-  pagos: Array<{ metodo: MetodoPago; monto: number }>;
+  pagos: Array<PagoState>;
   index: number;
   validation: PaymentValidation;
+  clientes: ClienteFiado[];
+  onClienteChange: (nombre: string, telefono: string) => void;
 }
 
 function PagoForm({ 
@@ -107,7 +122,9 @@ function PagoForm({
   total, 
   pagos, 
   index,
-  validation
+  validation,
+  clientes,
+  onClienteChange,
 }: PagoFormProps) {
   const MetodoIcon = METODOS_PAGO.find(m => m.value === metodo)?.Icon;
   const esUltimo = index === pagos.length - 1;
@@ -116,6 +133,9 @@ function PagoForm({
 
   const otrosPagos = pagos.filter((_, i) => i !== index).reduce((s, p) => s + p.monto, 0);
   const maxMonto = total - otrosPagos;
+  const pagoActual = pagos[index];
+  const clienteSeleccionado = clientes.find(c => c.telefono === pagoActual?.cliente_fiado_telefono);
+  const restante = Math.max(0, total - otrosPagos - montoConSugerido);
 
   return (
     <div className="card p-4 space-y-3 animate-slide-in">
@@ -160,31 +180,66 @@ function PagoForm({
         </div>
 
         {metodo === 'FIADO' && (
-          <div>
-            <label className="block text-sm font-medium text-primary mb-1">Cliente (obligatorio para fiado)</label>
-            <select
-              className="input-field"
-              aria-label="Seleccionar cliente para fiado"
-            >
-              <option value="">Seleccionar cliente...</option>
-            </select>
-            <p className="text-xs text-muted">Los pagos a fiado requieren seleccionar un cliente</p>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-sm font-medium text-primary mb-1">Cliente (obligatorio para fiado)</label>
+              <select
+                className="input-field"
+                value={clienteSeleccionado ? clienteSeleccionado.telefono : ''}
+                onChange={(e) => {
+                  if (e.target.value === '__nuevo__') {
+                    onClienteChange('', '');
+                    return;
+                  }
+                  const cliente = clientes.find(c => c.telefono === e.target.value);
+                  onClienteChange(cliente?.nombre ?? '', cliente?.telefono ?? '');
+                }}
+                aria-label="Seleccionar cliente para fiado"
+              >
+                <option value="">Seleccionar cliente o crear uno nuevo...</option>
+                {clientes.map(c => (
+                  <option key={c.telefono} value={c.telefono}>
+                    {c.nombre} ({c.telefono})
+                  </option>
+                ))}
+                <option value="__nuevo__">➕ Cliente nuevo</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={pagoActual?.cliente_fiado_nombre ?? ''}
+                onChange={(e) => onClienteChange(e.target.value, pagoActual?.cliente_fiado_telefono ?? '')}
+                className="input-field"
+                placeholder="Nombre del cliente"
+                aria-label="Nombre del cliente para fiado"
+              />
+              <input
+                type="tel"
+                value={pagoActual?.cliente_fiado_telefono ?? ''}
+                onChange={(e) => onClienteChange(pagoActual?.cliente_fiado_nombre ?? '', e.target.value)}
+                className="input-field"
+                placeholder="+59171234567"
+                aria-label="Teléfono del cliente para fiado"
+              />
+            </div>
+            <p className="text-xs text-muted">
+              Se creará una cuenta por cobrar por este monto, con vencimiento a 15 días.
+            </p>
           </div>
         )}
 
         {metodo === 'EFECTIVO' && (
-          <div className="bg-surface-alt rounded-lg p-3">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-muted">Entregado:</span>
-              <span className="font-medium">{montoConSugerido > 0 ? `Bs ${montoConSugerido.toLocaleString('es-BO')}` : 'Bs 0'}</span>
+          <div className="bg-surface-alt rounded-lg p-3 space-y-1">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted">Este pago:</span>
+              <span className="font-medium">{formatBs(montoConSugerido)}</span>
             </div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-muted">Total venta:</span>
-              <span className="font-medium">Bs {total.toLocaleString('es-BO')}</span>
-            </div>
-            <div className="flex justify-between text-sm" style={{ color: 'var(--color-green-500)' }}>
-              <span className="font-medium">Cambio:</span>
-              <span className="font-bold">Bs {(montoConSugerido - total).toLocaleString('es-BO')}</span>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted">Restante de la venta:</span>
+              <span className={`font-medium ${restante === 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                {restante === 0 ? 'Pago completo' : formatBs(restante)}
+              </span>
             </div>
           </div>
         )}
@@ -210,29 +265,76 @@ export function CarritoPanel({
   cargando, 
   ventaExitosa 
 }: CarritoPanelProps) {
-  const [pagos, setPagos] = useState<Array<{ metodo: 'EFECTIVO' | 'QR' | 'FIADO'; monto: number; cliente_fiado_id?: string }>>([
+  const [pagos, setPagos] = useState<PagoState[]>([
     { metodo: 'EFECTIVO', monto: 0 },
   ]);
-  const [_clientesFiados] = useState<Array<{ id: string; nombre: string; telefono: string }>>([
-    { id: 'cli-1', nombre: 'Juan Pérez', telefono: '+59171234567' },
-    { id: 'cli-2', nombre: 'María López', telefono: '+59169876543' },
-    { id: 'cli-3', nombre: 'Carlos Ruiz', telefono: '+59175555555' },
-  ]);
+  const [clientesFiados, setClientesFiados] = useState<ClienteFiado[]>([]);
+
+  // Clientes reales: se derivan de las cuentas por cobrar existentes.
+  useEffect(() => {
+    let activo = true;
+    cuentaPorCobrarRepository.getAll()
+      .then(cuentas => {
+        if (!activo) return;
+        const porTelefono = new Map<string, ClienteFiado>();
+        for (const cuenta of cuentas) {
+          if (!porTelefono.has(cuenta.cliente_telefono)) {
+            porTelefono.set(cuenta.cliente_telefono, {
+              nombre: cuenta.cliente_nombre,
+              telefono: cuenta.cliente_telefono,
+            });
+          }
+        }
+        setClientesFiados([...porTelefono.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      })
+      .catch(err => console.error('Error cargando clientes de fiado:', err));
+    return () => { activo = false; };
+  }, []);
 
   const total = totales.total;
   const subtotal = totales.subtotal;
 
-  const actualizarPago = useCallback((index: number, campo: 'metodo' | 'monto' | 'cliente_fiado_id', valor: any) => {
+  // Primer pago en efectivo: arranca con el total para cobrar en un toque.
+  useEffect(() => {
+    if (total <= 0) return;
+    setPagos(prev => {
+      if (prev.length === 1 && prev[0].metodo === 'EFECTIVO' && prev[0].monto === 0) {
+        return [{ ...prev[0], monto: total }];
+      }
+      return prev;
+    });
+  }, [total]);
+
+  // Carrito vacio: reinicia los pagos.
+  useEffect(() => {
+    if (items.length === 0) setPagos([{ metodo: 'EFECTIVO', monto: 0 }]);
+  }, [items.length]);
+
+  const actualizarPago = useCallback((index: number, campo: 'metodo' | 'monto' | 'cliente_fiado_nombre' | 'cliente_fiado_telefono', valor: any) => {
     setPagos(prev => prev.map((p, i) => i === index ? { ...p, [campo]: valor } : p));
   }, []);
 
+  const actualizarClienteFiado = useCallback((index: number, nombre: string, telefono: string) => {
+    setPagos(prev => prev.map((p, i) => i === index
+      ? { ...p, cliente_fiado_nombre: nombre, cliente_fiado_telefono: telefono }
+      : p));
+  }, []);
+
   const agregarPago = useCallback((metodo: 'EFECTIVO' | 'QR' | 'FIADO') => {
-    const totalPagos = pagos.reduce((s, p) => s + p.monto, 0);
-    const restante = total - totalPagos;
-    if (restante <= 0) return;
-    
-    setPagos(prev => [...prev, { metodo, monto: restante }]);
-  }, [pagos, total]);
+    setPagos(prev => {
+      if (prev.some(p => p.metodo === metodo)) return prev;
+      const totalPagos = prev.reduce((s, p) => s + p.monto, 0);
+      const restante = total - totalPagos;
+
+      // Si solo hay un pago completo (o vacio), cambiar su metodo conserva el monto.
+      // Si ya se redujo a un pago parcial, se agrega un segundo pago por el resto.
+      if (prev.length === 1 && (prev[0].monto === 0 || prev[0].monto >= total - 0.01)) {
+        return [{ ...prev[0], metodo }];
+      }
+      if (restante <= 0) return prev;
+      return [...prev, { metodo, monto: restante }];
+    });
+  }, [total]);
 
   const quitarPago = useCallback((index: number) => {
     if (pagos.length <= 1) return;
@@ -242,20 +344,21 @@ export function CarritoPanel({
   const montoPagos = pagos.reduce((s, p) => s + p.monto, 0);
   const validation = validatePayment(total, pagos as any);
 
-  const pagoCompleto = validation.valid && montoPagos === total && total > 0;
+  const pagoCompleto = validation.valid && Math.abs(montoPagos - total) <= 0.01 && total > 0;
 
   const handleCobrar = useCallback(async () => {
     if (!pagoCompleto) return;
     
-    const pagosParaCobrar = pagos.map(p => ({
+    const pagosParaCobrar: PagoCreate[] = pagos.map(p => ({
       metodo: p.metodo,
       monto: p.monto,
-      cliente_fiado_id: p.metodo === 'FIADO' ? p.cliente_fiado_id : undefined,
+      cliente_fiado_nombre: p.metodo === 'FIADO' ? p.cliente_fiado_nombre?.trim() : undefined,
+      cliente_fiado_telefono: p.metodo === 'FIADO' ? p.cliente_fiado_telefono?.trim() : undefined,
       referencia_qr: p.metodo === 'QR' ? `QR-${Date.now()}` : undefined,
     }));
     
     await onCobrar(pagosParaCobrar);
-  }, [pagos, total, onCobrar, pagoCompleto]);
+  }, [pagos, onCobrar, pagoCompleto]);
 
   if (ventaExitosa) {
     return (
@@ -264,7 +367,7 @@ export function CarritoPanel({
         <h3 className="text-h3 font-semibold text-primary mt-4">¡Venta Completada!</h3>
         <p className="text-muted mt-2">La venta se registró correctamente offline</p>
         <button 
-          onClick={() => window.location.reload()} 
+          onClick={onLimpiarCarrito}
           className="btn-primary mt-6"
         >
           Nueva Venta
@@ -345,12 +448,18 @@ export function CarritoPanel({
       </div>
 
       <div className="border-t border-surface-alt p-4 space-y-4">
+        {total <= 0 ? (
+          <p className="py-2 text-center text-sm text-muted">
+            Agrega productos al carrito para cobrar
+          </p>
+        ) : (
+          <>
         <div className="flex gap-2 flex-wrap">
           {METODOS_PAGO.map(m => (
             <button
               key={m.value}
               onClick={() => agregarPago(m.value)}
-              disabled={pagos.reduce((s, p) => s + p.monto, 0) >= total}
+              disabled={total <= 0 || (pagos.length > 1 && pagos.some(p => p.metodo === m.value))}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
                 pagos.some(p => p.metodo === m.value)
                   ? 'border-primary-500 bg-primary-50 text-primary-700'
@@ -375,6 +484,8 @@ export function CarritoPanel({
               pagos={pagos}
               index={index}
               validation={index === pagos.length - 1 ? validation : { valid: true, diferencia: 0 }}
+              clientes={clientesFiados}
+              onClienteChange={(nombre, telefono) => actualizarClienteFiado(index, nombre, telefono)}
             />
           ))}
         </div>
@@ -413,15 +524,9 @@ export function CarritoPanel({
               `Cobrar ${formatBs(total)}`
             )}
           </button>
-
-          {!pagoCompleto && (
-            <p className="text-center text-sm text-muted">
-              {montoPagos === 0 
-                ? 'Selecciona un método de pago para comenzar' 
-                : `Faltan ${formatBs(total - montoPagos)} para completar el pago`}
-            </p>
-          )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

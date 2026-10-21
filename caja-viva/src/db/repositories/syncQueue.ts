@@ -15,6 +15,31 @@ export const syncQueueRepository = {
       .slice(0, limit);
   },
 
+  /**
+   * Items en ERROR que aun se pueden reintentar (hasta 5 intentos).
+   * Se reintentan automaticamente en cada sincronizacion.
+   */
+  async getReintentables(limit = 50, maxReintentos = 5): Promise<SyncQueueItem[]> {
+    const db = await getDB();
+    const errores = await db.getAllFromIndex('sync_queue', 'by-estado', 'ERROR');
+    return errores
+      .filter(item => item.reintentos < maxReintentos)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .slice(0, limit);
+  },
+
+  /** Devuelve a PENDIENTE todos los items en ERROR para reintentarlos. */
+  async resetErrores(): Promise<number> {
+    const db = await getDB();
+    const errores = await db.getAllFromIndex('sync_queue', 'by-estado', 'ERROR');
+    const tx = db.transaction('sync_queue', 'readwrite');
+    for (const item of errores) {
+      await tx.objectStore('sync_queue').put({ ...item, estado: 'PENDIENTE', error_mensaje: null });
+    }
+    await tx.done;
+    return errores.length;
+  },
+
   async getByTipo(tipo: SyncQueueItem['tipo_entidad']): Promise<SyncQueueItem[]> {
     const db = await getDB();
     return db.getAllFromIndex('sync_queue', 'by-tipo', tipo);

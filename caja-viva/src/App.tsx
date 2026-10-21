@@ -3,16 +3,18 @@ import { Layout, PageHeader, Card, CardHeader } from './components/layout/Layout
 import { ThinkingOrb } from './components/common/ThinkingOrb';
 import { SyncBadge, SyncToast } from './components/common/SyncBadge';
 import { initDB } from './db/schema';
-import { productoRepository } from './db/repositories';
+import { productoRepository, ventaRepository, cuentaPorCobrarRepository, syncQueueRepository } from './db/repositories';
 import { VentaRapidaPage } from './features/venta/VentaRapidaPage';
 import { InventarioPage } from './features/inventario/InventarioPage';
 import { FiadosPage } from './features/fiados/FiadosPage';
+import { CierreCajaPage } from './features/caja/CierreCajaPage';
 import { seedDemoData } from './features/demo/demoData';
 import { useSyncStatus } from './hooks/useSyncStatus';
+import { todayISO } from './db/schema';
 
-type Vista = 'dashboard' | 'venta' | 'inventario' | 'fiados';
+type Vista = 'dashboard' | 'venta' | 'inventario' | 'fiados' | 'cierre';
 
-const VISTAS: Vista[] = ['dashboard', 'venta', 'inventario', 'fiados'];
+const VISTAS: Vista[] = ['dashboard', 'venta', 'inventario', 'fiados', 'cierre'];
 
 /** Lee la vista desde la URL: `/#inventario` o `/inventario` (deep link Vercel). */
 function vistaDesdeUrl(): Vista {
@@ -59,15 +61,15 @@ export default function App() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [productos, ventas, fiados, queue] = await Promise.all([
+      const [productos, ventasHoy, fiados, queue] = await Promise.all([
         productoRepository.getAll(),
-        import('./db/repositories').then(m => m.ventaRepository.getAll()),
-        import('./db/repositories').then(m => m.cuentaPorCobrarRepository.getAll()),
-        import('./db/repositories').then(m => m.syncQueueRepository.getEstadisticas()),
+        ventaRepository.getByFecha(todayISO()),
+        cuentaPorCobrarRepository.getAll(),
+        syncQueueRepository.getEstadisticas(),
       ]);
       setProductosCount(productos.length);
-      setVentasCount(ventas.length);
-      setFiadosCount(fiados.length);
+      setVentasCount(ventasHoy.length);
+      setFiadosCount(fiados.filter(c => c.saldo_pendiente > 0).length);
       setSyncStats(queue);
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -87,6 +89,16 @@ export default function App() {
   useEffect(() => {
     if (dbReady && sync.lastSyncAt) void loadStats();
   }, [dbReady, sync.lastSyncAt, loadStats]);
+
+  const reintentarErrores = async () => {
+    try {
+      await syncQueueRepository.resetErrores();
+      await sync.runSync();
+      await loadStats();
+    } catch (error) {
+      console.error('Error reintentando sincronizacion:', error);
+    }
+  };
 
   const handleSeedDemo = async () => {
     setSeeding(true);
@@ -223,6 +235,15 @@ export default function App() {
               </svg>
               Registrar Fiado
             </button>
+            <button
+              onClick={() => setVista('cierre')}
+              className="btn-secondary w-full justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Cierre de Caja
+            </button>
           </div>
         </Card>
 
@@ -295,7 +316,14 @@ export default function App() {
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted">Errores</span>
-              <span className="font-medium text-red-600">{syncStats.errores}</span>
+              <span className="flex items-center gap-2 font-medium text-red-600">
+                {syncStats.errores}
+                {syncStats.errores > 0 && (
+                  <button onClick={() => void reintentarErrores()} className="text-xs underline">
+                    Reintentar
+                  </button>
+                )}
+              </span>
             </div>
             <div className="mt-3 space-y-2 border-t border-surface-alt pt-3 text-xs text-muted">
               <div className="flex items-center justify-between">
@@ -367,7 +395,15 @@ export default function App() {
 
   return (
     <Layout syncSlot={syncSlot} vista={vista} onNavigate={(v) => setVista(v as Vista)}>
-      {vista === 'dashboard' ? renderDashboard() : vista === 'venta' ? <VentaRapidaPage /> : vista === 'inventario' ? <InventarioPage /> : <FiadosPage />}
+      {vista === 'dashboard'
+        ? renderDashboard()
+        : vista === 'venta'
+          ? <VentaRapidaPage />
+          : vista === 'inventario'
+            ? <InventarioPage />
+            : vista === 'fiados'
+              ? <FiadosPage />
+              : <CierreCajaPage />}
       {sync.state === 'synced' && sync.lastMessage && <SyncToast message={sync.lastMessage} />}
     </Layout>
   );

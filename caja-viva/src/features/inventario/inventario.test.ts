@@ -146,7 +146,7 @@ describe('Inventario - Gestión y Alertas de Stock', () => {
       };
       const result = validateProduct(producto);
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('precio_venta'))).toBe(true);
+      expect(result.errors.some(e => e.includes('precio de venta'))).toBe(true);
     });
 
     it('should reject negative stock_minimo', () => {

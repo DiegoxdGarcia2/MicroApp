@@ -39,6 +39,27 @@ export function Layout({ children, syncSlot, vista, onNavigate }: LayoutProps) {
               )}
             </nav>
           </div>
+
+          {/* Navegación móvil: la barra lateral solo se muestra en lg+ */}
+          <nav className="flex gap-1 overflow-x-auto border-t border-surface-alt py-2 lg:hidden" aria-label="Navegación móvil">
+            {[
+              { id: 'venta', label: 'Ventas' },
+              { id: 'inventario', label: 'Inventario' },
+              { id: 'fiados', label: 'Fiados' },
+              { id: 'cierre', label: 'Cierre' },
+            ].map(item => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                onClick={(e) => { e.preventDefault(); onNavigate?.(item.id); }}
+                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  vista === item.id ? 'bg-primary-50 text-primary-700' : 'text-muted hover:bg-surface-alt'
+                }`}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
         </div>
       </header>
 
@@ -69,6 +90,12 @@ export function Layout({ children, syncSlot, vista, onNavigate }: LayoutProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               Fiados
+            </a>
+            <a href="#cierre" onClick={(e) => { e.preventDefault(); onNavigate?.('cierre'); }} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${vista === 'cierre' ? 'text-primary bg-primary-50' : 'text-muted hover:bg-surface hover:text-primary'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Cierre de Caja
             </a>
           </nav>
           <div className="p-4 border-t border-surface">

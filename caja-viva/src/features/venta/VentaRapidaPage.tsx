@@ -7,6 +7,7 @@ import { CarritoPanel } from './CarritoPanel';
 import { Layout, PageHeader, Card, CardHeader } from '../../components/layout/Layout';
 import { ThinkingOrb } from '../../components/common/ThinkingOrb';
 import { formatBs } from './ventaUtils';
+import type { PagoCreate } from './ventaUtils';
 
 export function VentaRapidaPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -60,7 +61,7 @@ export function VentaRapidaPage() {
 
   const carritoIds = new Set(carrito.map(item => item.producto.id));
 
-  const handleCobrar = useCallback(async (pagos: Array<{ metodo: 'EFECTIVO' | 'QR' | 'FIADO'; monto: number; cliente_fiado_id?: string; referencia_qr?: string }>) => {
+  const handleCobrar = useCallback(async (pagos: PagoCreate[]) => {
     await procesarVenta(pagos);
   }, [procesarVenta]);
 

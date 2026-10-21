@@ -3,4 +3,5 @@ export * from './producto';
 export * from './venta';
 export * from './movimientoStock';
 export * from './cuentaCobrar';
+export * from './arqueo';
 export * from './syncQueue';

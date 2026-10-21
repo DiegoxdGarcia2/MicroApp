@@ -65,6 +65,10 @@ class SyncResponse(BaseModel):
     sincronizados: int = Field(..., description="Número de transacciones procesadas exitosamente")
     duplicados: int = Field(default=0, description="Transacciones ignoradas por idempotencia")
     conflictos: List["ConflictoSync"] = Field(default_factory=list)
+    resultados: List[TransaccionResultado] = Field(
+        default_factory=list,
+        description="Resultado individual por client_transaction_id",
+    )
     servidor_timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 
 

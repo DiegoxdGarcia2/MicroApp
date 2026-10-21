@@ -108,8 +108,9 @@ export function calculateCreditScore(
   const averageAmount = clientAccounts.reduce((sum, a) => sum + a.monto_total, 0) / totalAccounts;
 
   // Factor 1: Historial de pagos (0-100)
+  // Una cuenta PARCIAL indica pago parcial: cuenta la mitad que una PAGADO.
   const paymentHistoryScore = totalAccounts > 0
-    ? Math.round((paidAccounts / totalAccounts) * 100)
+    ? Math.round(((paidAccounts + partialAccounts * 0.5) / totalAccounts) * 100)
     : 50;
 
   // Factor 2: Deuda actual (0-100, inverso: menos deuda = mejor)
@@ -257,8 +258,8 @@ export function getCreditSemaphore(
     };
   }
 
-  // Basado en score crediticio
-  if (score.score >= 80) {
+  // Basado en score crediticio (nivel BUENO o superior = VERDE)
+  if (score.score >= 70) {
     // EXCELENTE/BUENO: VERDE
     const maxSuggested = Math.min(requestedAmount, Math.round(score.details.averageAmount * 1.5));
     return {
@@ -269,9 +270,12 @@ export function getCreditSemaphore(
     };
   }
 
-  if (score.score >= 60) {
-    // REGULAR: AMARILLO
-    const maxSuggested = Math.min(requestedAmount, Math.round(score.details.averageAmount * 0.8));
+  if (score.score >= 50) {
+    // REGULAR: AMARILLO — máximo 50% del monto solicitado y 80% del promedio histórico
+    const maxSuggested = Math.min(
+      Math.round(requestedAmount * 0.5),
+      Math.round(score.details.averageAmount * 0.8)
+    );
     return {
       color: 'AMARILLO',
       maxSuggestedFiado: maxSuggested,
@@ -359,13 +363,15 @@ export function generateSalvavidasScript(
   if (type === 'FORMAL') {
     script = `Estimado/a ${clientName}:
 
-Por políticas del sistema de caja, no podemos autorizar nuevos fiados hasta que se liquide el saldo anterior pendiente.
+Por Políticas del sistema de caja, no podemos autorizar nuevos fiados hasta que se liquide el saldo anterior pendiente.
 
 El monto solicitado de ${formattedAmount} Bs no puede ser procesado como fiado en este momento.
 
 Opciones disponibles:
 • Pago al contado (efectivo/QR/transferencia)
-• Liquidar saldo anterior para reactivar línea de crédito
+• liquidar saldo anterior para reactivar línea de crédito
+
+Las cuentas vencidas bloquean nuevas cuentas hasta regularizar el saldo.
 
 Agradecemos su comprensión.`;
   } else {
@@ -383,7 +389,7 @@ Opciones:
   }
 
   if (riskAssumed) {
-    script += `\n\n⚠️ AUTORIZACIÓN BAJO MI PROPIO RIESGO: El dueño ha autorizado este fiado asumiendo el riesgo crediticio. Flag: riesgo_asumido = true`;
+    script += `\n\n⚠️ Autorización bajo mi propio riesgo: el dueño ha autorizado este fiado asumiendo el riesgo crediticio. Flag: riesgo_asumido = true`;
   }
 
   return {

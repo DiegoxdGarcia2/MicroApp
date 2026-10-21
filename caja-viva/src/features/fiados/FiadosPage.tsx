@@ -1,26 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { CuentaPorCobrar } from '../../db/types';
-import { cuentaPorCobrarRepository, syncQueueRepository } from '../../db/repositories';
+import type { CuentaPorCobrar, MovimientoCobro } from '../../db/types';
+import { cuentaPorCobrarRepository } from '../../db/repositories';
 import {
   getAccountStatus,
   generateWhatsAppReminderUrl,
   validateCuentaPorCobrar,
   formatBs,
 } from './fiadosUtils';
+import { normalizarTexto } from '../venta/ventaUtils';
+import { addDaysLocal, formatFechaLocal } from '../../utils/dateUtils';
 import { Layout, PageHeader, Card, CardHeader } from '../../components/layout/Layout';
 
 type EstadoFiltro = 'Todos' | 'PENDIENTE' | 'PARCIAL' | 'PAGADO' | 'VENCIDO';
 
-function fechaEnDias(dias: number): string {
-  const fecha = new Date();
-  fecha.setDate(fecha.getDate() + dias);
-  return fecha.toISOString().split('T')[0];
-}
-
 function formatearFecha(iso: string): string {
-  const fecha = new Date(iso);
-  if (Number.isNaN(fecha.getTime())) return iso;
-  return fecha.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return formatFechaLocal(iso);
 }
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -41,7 +35,19 @@ const FORM_INICIAL: FormState = {
   cliente_nombre: '',
   cliente_telefono: '+591',
   monto_total: '',
-  fecha_vencimiento: fechaEnDias(15),
+  fecha_vencimiento: addDaysLocal(15),
+};
+
+interface PagoFormState {
+  monto: string;
+  metodo: MovimientoCobro['metodo'];
+  notas: string;
+}
+
+const PAGO_INICIAL: PagoFormState = {
+  monto: '',
+  metodo: 'EFECTIVO',
+  notas: '',
 };
 
 export function FiadosPage() {
@@ -53,6 +59,13 @@ export function FiadosPage() {
   const [form, setForm] = useState<FormState>(FORM_INICIAL);
   const [formError, setFormError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  // Cobro de un fiado existente
+  const [cuentaPago, setCuentaPago] = useState<CuentaPorCobrar | null>(null);
+  const [pagoForm, setPagoForm] = useState<PagoFormState>(PAGO_INICIAL);
+  const [pagoError, setPagoError] = useState<string | null>(null);
+  const [procesandoPago, setProcesandoPago] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
   const cargarCuentas = useCallback(async () => {
     try {
@@ -75,11 +88,11 @@ export function FiadosPage() {
   );
 
   const filtradas = useMemo(() => {
-    const termino = query.trim().toLowerCase();
+    const termino = normalizarTexto(query.trim());
     return cuentasConEstado.filter((cuenta) => {
       const coincideTexto =
         termino.length === 0 ||
-        cuenta.cliente_nombre.toLowerCase().includes(termino) ||
+        normalizarTexto(cuenta.cliente_nombre).includes(termino) ||
         cuenta.cliente_telefono.includes(termino);
       const coincideEstado = statusFilter === 'Todos' || cuenta.estado === statusFilter;
       return coincideTexto && coincideEstado;
@@ -89,7 +102,7 @@ export function FiadosPage() {
   const stats = useMemo(
     () => ({
       total: cuentasConEstado.length,
-      pendiente: cuentasConEstado.filter((c) => c.estado === 'PENDIENTE').length,
+      pendiente: cuentasConEstado.filter((c) => c.estado === 'PENDIENTE' || c.estado === 'PARCIAL').length,
       vencido: cuentasConEstado.filter((c) => c.estado === 'VENCIDO').length,
       totalPorCobrar: cuentasConEstado.reduce((sum, c) => sum + c.saldo_pendiente, 0),
     }),
@@ -98,6 +111,57 @@ export function FiadosPage() {
 
   const handleRecordarWhatsApp = (cuenta: CuentaPorCobrar) => {
     window.open(generateWhatsAppReminderUrl(cuenta), '_blank');
+  };
+
+  const abrirCobro = (cuenta: CuentaPorCobrar) => {
+    setCuentaPago(cuenta);
+    setPagoForm({ ...PAGO_INICIAL, monto: String(cuenta.saldo_pendiente) });
+    setPagoError(null);
+  };
+
+  const cerrarCobro = () => {
+    if (procesandoPago) return;
+    setCuentaPago(null);
+    setPagoForm(PAGO_INICIAL);
+    setPagoError(null);
+  };
+
+  const handleRegistrarPago = async () => {
+    if (!cuentaPago) return;
+    const monto = Number(pagoForm.monto);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setPagoError('Ingresa un monto mayor a 0');
+      return;
+    }
+    if (monto > cuentaPago.saldo_pendiente) {
+      setPagoError(`El monto no puede superar el saldo de ${formatBs(cuentaPago.saldo_pendiente)}`);
+      return;
+    }
+
+    setProcesandoPago(true);
+    setPagoError(null);
+    try {
+      const resultado = await cuentaPorCobrarRepository.aplicarPago(
+        cuentaPago.id,
+        monto,
+        pagoForm.metodo,
+        pagoForm.notas.trim() || null,
+      );
+      if (!resultado) {
+        setPagoError('La cuenta ya no existe');
+        return;
+      }
+      setMensaje(
+        `Pago de ${formatBs(monto)} registrado. Saldo pendiente: ${formatBs(resultado.cuenta.saldo_pendiente)}`,
+      );
+      setCuentaPago(null);
+      setPagoForm(PAGO_INICIAL);
+      await cargarCuentas();
+    } catch (error) {
+      setPagoError(error instanceof Error ? error.message : 'No se pudo registrar el pago');
+    } finally {
+      setProcesandoPago(false);
+    }
   };
 
   const handleGuardar = async () => {
@@ -132,14 +196,6 @@ export function FiadosPage() {
       };
 
       await cuentaPorCobrarRepository.create(cuenta);
-      await syncQueueRepository.enqueue({
-        tipo_entidad: 'CUENTA_POR_COBRAR',
-        accion: 'CREATE',
-        entity_id: cuenta.id,
-        client_tx_id: crypto.randomUUID(),
-        payload: cuenta as unknown as Record<string, unknown>,
-        timestamp: now,
-      });
 
       setForm(FORM_INICIAL);
       setShowForm(false);
@@ -180,6 +236,13 @@ export function FiadosPage() {
             </button>
           }
         />
+
+        {mensaje && (
+          <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+            <span className="flex-1">{mensaje}</span>
+            <button onClick={() => setMensaje(null)} className="font-semibold" aria-label="Cerrar mensaje">×</button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -271,16 +334,30 @@ export function FiadosPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <button
-                          onClick={() => handleRecordarWhatsApp(cuenta)}
-                          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 transition-colors"
-                          aria-label={`Recordar por WhatsApp a ${cuenta.cliente_nombre}`}
-                        >
+                        <div className="flex items-center justify-end gap-1">
+                          {cuenta.saldo_pendiente > 0 && (
+                            <button
+                              onClick={() => abrirCobro(cuenta)}
+                              className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors"
+                              aria-label={`Registrar pago de ${cuenta.cliente_nombre}`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                              Cobrar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRecordarWhatsApp(cuenta)}
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 transition-colors"
+                            aria-label={`Recordar por WhatsApp a ${cuenta.cliente_nombre}`}
+                          >
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                             <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 01-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 4.54 0 8.24 3.69 8.24 8.23s-3.7 8.24-8.23 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.39.11-.51.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.17-.47-.29z" />
                           </svg>
                           Recordar
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -328,8 +405,8 @@ export function FiadosPage() {
                   <input
                     id="monto_total"
                     type="number"
-                    min="0"
-                    step="0.5"
+                    min="1"
+                    step="1"
                     className="input-field"
                     value={form.monto_total}
                     onChange={(e) => setForm({ ...form, monto_total: e.target.value })}
@@ -364,6 +441,78 @@ export function FiadosPage() {
               </button>
               <button className="btn-primary" onClick={() => void handleGuardar()} disabled={guardando}>
                 {guardando ? 'Guardando...' : 'Guardar Fiado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {cuentaPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl">
+            <h3 className="text-h3 font-semibold text-primary mb-1">Registrar pago</h3>
+            <p className="text-sm text-muted mb-4">
+              {cuentaPago.cliente_nombre} · Saldo {formatBs(cuentaPago.saldo_pendiente)}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="pago_monto" className="block text-sm font-medium text-primary mb-1">
+                  Monto a cobrar (Bs)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="pago_monto"
+                    type="number"
+                    min="1"
+                    max={cuentaPago.saldo_pendiente}
+                    step="1"
+                    className="input-field flex-1"
+                    value={pagoForm.monto}
+                    onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary whitespace-nowrap"
+                    onClick={() => setPagoForm({ ...pagoForm, monto: String(cuentaPago.saldo_pendiente) })}
+                  >
+                    Saldo total
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="pago_metodo" className="block text-sm font-medium text-primary mb-1">
+                  Método
+                </label>
+                <select
+                  id="pago_metodo"
+                  className="input-field"
+                  value={pagoForm.metodo}
+                  onChange={(e) => setPagoForm({ ...pagoForm, metodo: e.target.value as MovimientoCobro['metodo'] })}
+                >
+                  <option value="EFECTIVO">Efectivo</option>
+                  <option value="QR">QR</option>
+                  <option value="TRANSFERENCIA">Transferencia</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="pago_notas" className="block text-sm font-medium text-primary mb-1">
+                  Notas (opcional)
+                </label>
+                <input
+                  id="pago_notas"
+                  className="input-field"
+                  value={pagoForm.notas}
+                  onChange={(e) => setPagoForm({ ...pagoForm, notas: e.target.value })}
+                  placeholder="Ej: pago parcial acordado"
+                />
+              </div>
+              {pagoError && <p className="text-sm text-red-600">{pagoError}</p>}
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button className="btn-secondary" onClick={cerrarCobro} disabled={procesandoPago}>
+                Cancelar
+              </button>
+              <button className="btn-primary" onClick={() => void handleRegistrarPago()} disabled={procesandoPago}>
+                {procesandoPago ? 'Registrando...' : 'Registrar pago'}
               </button>
             </div>
           </div>

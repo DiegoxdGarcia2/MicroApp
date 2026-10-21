@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import { 
-  encryptCIPhoto,
-  decryptCIPhoto,
   calculateCreditScore,
   detectAnomalousAmount,
   getCreditSemaphore,
@@ -9,32 +8,18 @@ import {
   getGlobalLimitAlertLevel,
   generateSalvavidasScript,
 } from './creditGuardianUtils';
+import { encryptCIPhoto, decryptCIPhoto } from '../../utils/cryptoUtils';
 import type { CuentaPorCobrar } from '../../db/types';
 
-// Mock crypto.subtle for testing
-const mockEncrypt = vi.fn();
-const mockDecrypt = vi.fn();
-const mockImportKey = vi.fn();
-const mockGenerateKey = vi.fn();
-const mockExportKey = vi.fn();
-
-Object.defineProperty(global, 'crypto', {
-  value: {
-    subtle: {
-      encrypt: mockEncrypt,
-      decrypt: mockDecrypt,
-      importKey: mockImportKey,
-      generateKey: mockGenerateKey,
-      exportKey: mockExportKey,
-    },
-    getRandomValues: vi.fn((arr: Uint8Array) => {
-      for (let i = 0; i < arr.length; i++) arr[i] = i % 256;
-      return arr;
-    }),
-    randomUUID: vi.fn(() => 'test-uuid-' + Math.random().toString(36).substr(2, 9)),
-  },
-  writable: true,
-});
+// jsdom no expone crypto.subtle: usamos el WebCrypto real de Node para probar
+// el cifrado de extremo a extremo (PBKDF2 + AES-GCM).
+if (typeof globalThis.crypto?.subtle === 'undefined') {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: webcrypto,
+    writable: true,
+    configurable: true,
+  });
+}
 
 describe('T-007: Guardián Crediticio con IA', () => {
   beforeEach(() => {
@@ -45,79 +30,51 @@ describe('T-007: Guardián Crediticio con IA', () => {
     it('should encrypt CI photo with AES-GCM', async () => {
       const photoBlob = new Blob(['fake-image-data'], { type: 'image/jpeg' });
       const password = 'test-password-123';
-      
-      const mockKey = { type: 'secret' };
-      const mockEncryptedData = new ArrayBuffer(32);
-      const mockExportedKey = new ArrayBuffer(32);
-      
-      mockGenerateKey.mockResolvedValue(mockKey);
-      mockEncrypt.mockResolvedValue(mockEncryptedData);
-      mockExportKey.mockResolvedValue(mockExportedKey);
 
       const result = await encryptCIPhoto(photoBlob, password);
-      
+
       expect(result).toBeDefined();
-      expect(result.encryptedData).toBeInstanceOf(ArrayBuffer);
+      // En Node/jsdom el ArrayBuffer de WebCrypto puede venir de otro realm;
+      // validamos su tipo con toString para no depender de `instanceof`.
+      expect(Object.prototype.toString.call(result.encryptedData)).toBe('[object ArrayBuffer]');
+      expect(result.encryptedData.byteLength).toBeGreaterThan(0);
       expect(result.iv).toBeInstanceOf(Uint8Array);
+      expect(result.iv).toHaveLength(12);
       expect(result.salt).toBeInstanceOf(Uint8Array);
-      expect(result.keyHash).toBeDefined();
+      expect(result.salt).toHaveLength(16);
+      expect(result.keyHash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('should decrypt CI photo with correct password', async () => {
-      const encryptedData = new ArrayBuffer(32);
-      const iv = new Uint8Array(12);
-      const salt = new Uint8Array(16);
+      const original = new Blob(['fake-image-data'], { type: 'image/jpeg' });
       const password = 'test-password-123';
-      
-      const mockKey = { type: 'secret' };
-      const mockDecryptedData = new Blob(['fake-image-data'], { type: 'image/jpeg' });
-      
-      mockImportKey.mockResolvedValue(mockKey);
-      mockDecrypt.mockResolvedValue(mockDecryptedData);
+      const encrypted = await encryptCIPhoto(original, password);
 
-      const result = await decryptCIPhoto({
-        encryptedData,
-        iv,
-        salt,
-        keyHash: 'hash123',
-      }, password);
-      
+      const result = await decryptCIPhoto(encrypted, password);
+
       expect(result).toBeInstanceOf(Blob);
       expect(result.type).toBe('image/jpeg');
+      expect(await result.text()).toBe('fake-image-data');
     });
 
     it('should fail decryption with wrong password', async () => {
-      const encryptedData = new ArrayBuffer(32);
-      const iv = new Uint8Array(12);
-      const salt = new Uint8Array(16);
-      
-      mockImportKey.mockResolvedValue({ type: 'secret' });
-      mockDecrypt.mockRejectedValue(new Error('Decryption failed'));
+      const encrypted = await encryptCIPhoto(
+        new Blob(['fake-image-data'], { type: 'image/jpeg' }),
+        'correct-password'
+      );
 
-      await expect(decryptCIPhoto({
-        encryptedData,
-        iv,
-        salt,
-        keyHash: 'hash123',
-      }, 'wrong-password')).rejects.toThrow('Decryption failed');
+      await expect(decryptCIPhoto(encrypted, 'wrong-password')).rejects.toThrow();
     });
 
     it('should compress image before encryption', async () => {
-      // Create a larger "image" to test compression
+      // Blob grande: en navegador se comprime; en jsdom se cifra el original.
       const largeData = 'x'.repeat(100000);
       const photoBlob = new Blob([largeData], { type: 'image/jpeg' });
-      const password = 'test-password-123';
-      
-      const mockKey = { type: 'secret' };
-      mockGenerateKey.mockResolvedValue(mockKey);
-      mockEncrypt.mockResolvedValue(new ArrayBuffer(32));
-      mockExportKey.mockResolvedValue(new ArrayBuffer(32));
 
-      const result = await encryptCIPhoto(photoBlob, password);
-      
-      // The encryption should have been called
-      expect(mockEncrypt).toHaveBeenCalled();
+      const result = await encryptCIPhoto(photoBlob, 'test-password-123');
+
       expect(result.encryptedData).toBeDefined();
+      expect(result.encryptedData.byteLength).toBeGreaterThan(0);
     });
   });
 
@@ -321,7 +278,7 @@ describe('T-007: Guardián Crediticio con IA', () => {
 
   describe('Selector de Salvavidas Social', () => {
     it('should generate Formal script (Opción A)', () => {
-      const script = generateSalvavidasScript('FORMAL', 'Juan Pérez', 5000);
+      const { script } = generateSalvavidasScript('FORMAL', 'Juan Pérez', 5000);
       
       expect(script).toContain('Políticas del sistema de caja');
       expect(script).toContain('bloquean nuevas cuentas');
@@ -331,7 +288,7 @@ describe('T-007: Guardián Crediticio con IA', () => {
     });
 
     it('should generate Barrio script (Opción B)', () => {
-      const script = generateSalvavidasScript('BARRIO', 'Juan Pérez', 5000);
+      const { script } = generateSalvavidasScript('BARRIO', 'Juan Pérez', 5000);
       
       expect(script).toContain('casero');
       expect(script).toContain('administrador');
@@ -343,7 +300,7 @@ describe('T-007: Guardián Crediticio con IA', () => {
     });
 
     it('should include risk assumption warning', () => {
-      const script = generateSalvavidasScript('FORMAL', 'Juan Pérez', 5000, true);
+      const { script } = generateSalvavidasScript('FORMAL', 'Juan Pérez', 5000, true);
       
       expect(script).toContain('riesgo_asumido');
       expect(script).toContain('bajo mi propio riesgo');

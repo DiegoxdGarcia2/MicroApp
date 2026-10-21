@@ -187,8 +187,12 @@ export function ProductoFormModal({
                     disabled={isLoading}
                   >
                     <option value="">Seleccionar categoría</option>
+                    <option value="Abarrotes">Abarrotes</option>
                     <option value="Alimentos">Alimentos</option>
                     <option value="Bebidas">Bebidas</option>
+                    <option value="Comida">Comida</option>
+                    <option value="Lácteos">Lácteos</option>
+                    <option value="Panificados">Panificados</option>
                     <option value="Limpieza">Limpieza</option>
                     <option value="Higiene">Higiene Personal</option>
                     <option value="Farmacia">Farmacia</option>

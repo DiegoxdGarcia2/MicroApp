@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { productoRepository, movimientoStockRepository } from '../../db/repositories';
-import { sortProducts } from './inventarioUtils';
+import { productoRepository, movimientoStockRepository, detalleVentaRepository } from '../../db/repositories';
+import { sortProducts, filterProducts } from './inventarioUtils';
 import { ProductoFormModal } from './ProductoFormModal';
 import { AjusteStockModal } from './AjusteStockModal';
 import { Layout, PageHeader, Card } from '../../components/layout/Layout';
 import { StockBadge } from '../../components/common/StockBadge';
+import { generateId, todayISO } from '../../db/schema';
+import type { MovimientoStock } from '../../db/types';
 
 export function InventarioPage() {
   const [productos, setProductos] = useState<Array<any>>([]);
@@ -12,7 +14,7 @@ export function InventarioPage() {
   const [cargando, setCargando] = useState(true);
   const [, setCargandoProductos] = useState(false);
   const [query, setQuery] = useState('');
-  const [categoriaActiva, setCategoriaActiva] = useState<string>('Todos');
+  const [categoriaActiva, setCategoriaActiva] = useState<string>('Todas');
   const [stockFilter, setStockFilter] = useState<'Todos' | 'OK' | 'BAJO' | 'AGOTADO'>('Todos');
   const [ordenCampo, setOrdenCampo] = useState<'nombre' | 'precio_venta' | 'stock_actual' | 'categoria'>('nombre');
   const [ordenDireccion, setOrdenDireccion] = useState<'asc' | 'desc'>('asc');
@@ -41,7 +43,7 @@ export function InventarioPage() {
       
       // Extraer categorías únicas
       const cats = [...new Set(prods.map(p => p.categoria).filter(Boolean))] as string[];
-      setCategorias(['Todos', ...cats.sort()]);
+      setCategorias(cats.sort());
       
       // Calcular stats
       const statsCalc = {
@@ -67,35 +69,8 @@ export function InventarioPage() {
 
   // Filtrar y ordenar productos
   const productosFiltrados = useMemo(() => {
-    let resultado = [...productos];
-
-    // Filtro búsqueda
-    if (query.trim()) {
-      resultado = resultado.filter(p => 
-        p.nombre.toLowerCase().includes(query.toLowerCase()) ||
-        p.codigo_barras?.toLowerCase().includes(query.toLowerCase()) ||
-        p.categoria?.toLowerCase().includes(query.toLowerCase())
-      );
-    }
-
-    // Filtro categoría
-    if (categoriaActiva !== 'Todos') {
-      resultado = resultado.filter(p => p.categoria === categoriaActiva);
-    }
-
-    // Filtro stock
-    if (stockFilter !== 'Todos') {
-      resultado = resultado.filter(p => {
-        if (stockFilter === 'AGOTADO') return p.stock_actual === 0;
-        if (stockFilter === 'BAJO') return p.stock_actual > 0 && p.stock_actual <= p.stock_minimo;
-        if (stockFilter === 'OK') return p.stock_actual > p.stock_minimo;
-        return true;
-      });
-    }
-
-    // Ordenar
-    resultado = sortProducts(resultado, ordenCampo, ordenDireccion);
-    return resultado;
+    const filtrados = filterProducts(productos, query, categoriaActiva, stockFilter) as Array<any>;
+    return sortProducts(filtrados, ordenCampo, ordenDireccion) as Array<any>;
   }, [productos, query, categoriaActiva, stockFilter, ordenCampo, ordenDireccion]);
 
   // Stats derivados
@@ -136,7 +111,16 @@ export function InventarioPage() {
 
   const handleAjusteGuardado = async (movimiento: any) => {
     try {
-      await movimientoStockRepository.createWithStockUpdate(movimiento, productoRepository);
+      const completo: MovimientoStock = {
+        id: generateId(),
+        producto_id: movimiento.producto_id,
+        tipo: movimiento.tipo,
+        cantidad: Math.max(1, Number(movimiento.cantidad) || 0),
+        fecha: todayISO(),
+        usuario_id: null,
+        notas: movimiento.notas?.trim() || null,
+      };
+      await movimientoStockRepository.createWithStockUpdate(completo, productoRepository);
       setShowAjuste(false);
       setAjusteProducto(null);
       await cargarProductos();
@@ -147,6 +131,13 @@ export function InventarioPage() {
   };
 
   const handleEliminar = async (id: string) => {
+    // El backend no puede borrar un producto con ventas (FK detalles_venta):
+    // mejor bloquearlo antes para no perder historia ni generar un error de sync.
+    const ventas = await detalleVentaRepository.getByProducto(id);
+    if (ventas.length > 0) {
+      alert('No se puede eliminar: este producto ya tiene ventas registradas. Puedes dejarlo con stock 0 o ajustar su nombre.');
+      return;
+    }
     if (!confirm('¿Eliminar este producto permanentemente?')) return;
     try {
       await productoRepository.delete(id);

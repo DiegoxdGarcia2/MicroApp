@@ -45,9 +45,11 @@ export function useSyncStatus(): SyncStatus {
     if (!mounted.current) return;
 
     let colaPendiente = 0;
+    let colaErrores = 0;
     try {
       const stats = await syncQueueRepository.getEstadisticas();
       colaPendiente = stats.pendientes;
+      colaErrores = stats.errores;
     } catch {
       colaPendiente = 0;
     }
@@ -72,7 +74,7 @@ export function useSyncStatus(): SyncStatus {
 
     if (health.db_status === 'connected') {
       setLastSyncAt(health.timestamp ?? new Date().toISOString());
-      setState(colaPendiente > 0 ? 'pending' : 'synced');
+      setState(colaPendiente > 0 ? 'pending' : colaErrores > 0 ? 'error' : 'synced');
     } else {
       setState('error');
     }
@@ -96,7 +98,7 @@ export function useSyncStatus(): SyncStatus {
       setLastMessage(
         result.sinPendientes
           ? 'Todo al dia'
-          : `${result.sincronizados} movimiento(s) sincronizado(s)`,
+          : `${result.sincronizados} movimiento(s) sincronizado(s)${result.duplicados > 0 ? `, ${result.duplicados} ya estaban en el servidor` : ''}`,
       );
       setState('synced');
 

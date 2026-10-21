@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy import text
 
 from app.models import Base, Venta, DetalleVenta, Producto, MovimientoStock, SyncQueueItem
+from app.models import CuentaPorCobrar, MovimientoCobro, ArqueoCaja
 from app.services.sync_service import SyncService
 from app.schemas.sync import SyncPushRequest, TransaccionOffline, TransaccionResultado
 
@@ -190,6 +191,154 @@ class TestSyncEngine:
         # Debe lanzar error de validación por exceder 100 items
         assert "100" in str(exc_info.value) or "too_long" in str(exc_info.value)
 
+
+    @pytest.mark.asyncio
+    async def test_sync_cuenta_por_cobrar_ignora_campos_locales(self, sync_service, db_session):
+        """Crea una cuenta por cobrar aunque el payload traiga campos locales."""
+        transaccion = TransaccionOffline(
+            tipo="CUENTA_POR_COBRAR",
+            accion="CREATE",
+            entidad_id="cuenta-1",
+            client_transaction_id="tx-cuenta-1",
+            payload={
+                "cliente_nombre": "Cliente Prueba",
+                "cliente_telefono": "+59171234567",
+                "monto_total": 400,
+                "saldo_pendiente": 400,
+                "fecha_vencimiento": "2026-11-05",
+                "estado": "PENDIENTE",
+                # Campos que existen solo en IndexedDB y deben ignorarse.
+                "creado_en": "2026-10-21T19:08:42.355Z",
+                "actualizado_en": "2026-10-21T19:08:42.355Z",
+            },
+            timestamp_local=datetime.utcnow().isoformat(),
+        )
+
+        response = await sync_service.procesar_sync_push(
+            SyncPushRequest(transacciones=[transaccion])
+        )
+
+        assert response.sincronizados == 1
+        cuenta = await db_session.get(CuentaPorCobrar, "cuenta-1")
+        assert cuenta is not None
+        assert cuenta.saldo_pendiente == 400
+        assert cuenta.estado == "PENDIENTE"
+
+    @pytest.mark.asyncio
+    async def test_sync_movimiento_cobro_recalcula_saldo(self, sync_service, db_session):
+        """Un cobro parcial deja la cuenta en PARCIAL y descuenta el saldo."""
+        cuenta = CuentaPorCobrar(
+            id="cuenta-2",
+            cliente_nombre="Cliente Dos",
+            cliente_telefono="+59169876543",
+            monto_total=400,
+            saldo_pendiente=400,
+            fecha_vencimiento="2026-11-05",
+            estado="PENDIENTE",
+        )
+        db_session.add(cuenta)
+        await db_session.commit()
+
+        transaccion = TransaccionOffline(
+            tipo="MOVIMIENTO_COBRO",
+            accion="CREATE",
+            entidad_id="cobro-1",
+            client_transaction_id="tx-cobro-1",
+            payload={
+                "cuenta_cobrar_id": "cuenta-2",
+                "monto": 150,
+                "metodo": "EFECTIVO",
+                "fecha": "2026-10-21",
+                "notas": "Pago parcial",
+            },
+            timestamp_local=datetime.utcnow().isoformat(),
+        )
+
+        response = await sync_service.procesar_sync_push(
+            SyncPushRequest(transacciones=[transaccion])
+        )
+
+        assert response.sincronizados == 1
+        await db_session.refresh(cuenta)
+        assert cuenta.saldo_pendiente == 250
+        assert cuenta.estado == "PARCIAL"
+        assert await db_session.get(MovimientoCobro, "cobro-1") is not None
+
+    @pytest.mark.asyncio
+    async def test_sync_arqueo_caja_con_gastos(self, sync_service, db_session):
+        """El cierre de caja se guarda con el total plano de gastos."""
+        transaccion = TransaccionOffline(
+            tipo="ARQUEO_CAJA",
+            accion="CREATE",
+            entidad_id="arqueo-1",
+            client_transaction_id="tx-arqueo-1",
+            payload={
+                "fecha": "2026-10-21",
+                "efectivo_fisico_contado": 5000,
+                "efectivo_teorico": 4800,
+                "ventas_efectivo": 5000,
+                "ventas_qr": 2000,
+                "ventas_fiado": 1000,
+                "gastos_turno": 200,
+                "total_teorico": 7800,
+                "diferencia": 200,
+                "estado": "CERRADO",
+            },
+            timestamp_local=datetime.utcnow().isoformat(),
+        )
+
+        response = await sync_service.procesar_sync_push(
+            SyncPushRequest(transacciones=[transaccion])
+        )
+
+        assert response.sincronizados == 1
+        arqueo = await db_session.get(ArqueoCaja, "arqueo-1")
+        assert arqueo is not None
+        assert arqueo.gastos_turno == 200
+        assert arqueo.estado == "CERRADO"
+        assert arqueo.cerrado_en is not None
+
+    @pytest.mark.asyncio
+    async def test_reintenta_transaccion_que_quedo_procesando(self, sync_service, db_session):
+        """Una caida a mitad de proceso no debe perder la transaccion."""
+        from app.models import SyncQueueItem
+
+        db_session.add(SyncQueueItem(
+            id="item-procesando",
+            tipo_entidad="PRODUCTO",
+            accion="CREATE",
+            entity_id="producto-procesando",
+            client_tx_id="tx-procesando",
+            payload={},
+            timestamp=datetime.utcnow().isoformat(),
+            estado="PROCESANDO",
+            reintentos=0,
+        ))
+        await db_session.commit()
+
+        transaccion = TransaccionOffline(
+            tipo="PRODUCTO",
+            accion="CREATE",
+            entidad_id="producto-procesando",
+            client_transaction_id="tx-procesando",
+            payload={
+                "nombre": "Producto recuperado",
+                "codigo_barras": "REC-001",
+                "precio_venta": 10,
+                "costo": 6,
+                "stock_actual": 5,
+                "stock_minimo": 1,
+                "categoria": "Abarrotes",
+            },
+            timestamp_local=datetime.utcnow().isoformat(),
+        )
+
+        response = await sync_service.procesar_sync_push(
+            SyncPushRequest(transacciones=[transaccion])
+        )
+
+        assert response.sincronizados == 1
+        assert await db_session.get(Producto, "producto-procesando") is not None
 
     async def _procesar_sync_push(self, sync_service, client_transaction_id):
         """Helper para procesar sync push."""
