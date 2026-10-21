@@ -85,6 +85,7 @@ graph TD
 | **T-007** | Guardián Crediticio IA + Seguridad Crediticia | ✅ **DONE** | 2026-10-11 |
 | **INFRA** | Backend Híbrido SQLite/Neon + Docker + Deploy | ✅ **DONE** | 2026-10-11 |
 | **DEPLOY** | Producción Render + Vercel + Neon (Orden 9) | ✅ **DONE** | 2026-10-21 |
+| **CIERRE** | Cierre de Caja + Fiados + Sync idempotente (Orden 10) | ✅ **DONE** | 2026-10-21 |
 
 ---
 
@@ -100,6 +101,8 @@ graph TD
 
 > **Cuenta demo:** el dashboard incluye el botón «Cargar Datos de Demostración» con 10 productos típicos de Santa Cruz de la Sierra (idempotente, no duplica).
 > **Nota:** Render free duerme tras ~15 min y Neon free autosuspende; el primer acceso puede tardar ~50 s.
+>
+> **Estado final (Orden 10, 2026-10-21):** PWA completa con cierre de caja inmutable, fiados/cobros y sync idempotente. Verificación: **148/148 tests frontend**, **22/22 tests backend**, `tsc -b` y build de producción OK. Sync real contra Render + Neon verificado (alta/baja de producto, 2 completados, 0 errores). Bundle producción: `assets/index-BuMC8wdD.js`.
 
 ---
 

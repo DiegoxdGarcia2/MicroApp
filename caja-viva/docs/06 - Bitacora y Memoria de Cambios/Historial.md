@@ -273,4 +273,55 @@ Cierre de la Orden 9: secretos locales fuera de Git, deployer MCP con auto-sanac
 
 ---
 
+## [2026-10-21] - ORDEN 10: CIERRE DE CAJA, FIADOS Y SYNC IDEMPOTENTE EN PRODUCCIÓN (CAJAVIVA)
+
+### 🎯 Contexto
+Cierre funcional del sistema: se completaron los flujos de cierre de caja, fiado por venta, cobros parciales/totales y sincronización idempotente, y se verificaron de punta a punta contra Render + Neon.
+
+### ✨ Added
+- **Added** — `src/features/caja/CierreCajaPage.tsx`: conciliación diaria con ventas por método, gastos del turno, efectivo físico, umbral de diferencia, guardado inmutable, reporte imprimible e historial.
+- **Added** — `src/db/repositories/arqueo.ts`: persistencia local del cierre y payload plano para `ARQUEO_CAJA`, inmutable una vez cerrado.
+- **Added** — `src/features/caja/cierreTotals.test.ts` y `src/utils/dateUtils.test.ts`: cobertura de totales de cierre y fechas locales.
+- **Added** — `PagoVenta` / `Venta.pagos`: desglose de pagos mixtos (efectivo, QR, fiado) persistido junto a la venta.
+- **Added** — `src/utils/dateUtils.ts`: parseo/formateo de fechas locales sin desfase UTC.
+
+### 🔧 Changed / Fixed
+- **Fixed** — `sync_service.py`: handlers idempotentes por entidad; solo `COMPLETADO` se considera duplicado y `PROCESANDO` se reintenta. Respuesta con `resultados` por transacción.
+- **Fixed** — Sync frontend: procesa la cola en orden cronológico global, reintenta `ERROR` hasta 5 veces y solo marca completados los `OK`/`DUPLICADO`.
+- **Fixed** — Fiado por venta: crea una `CuentaPorCobrar` nueva por venta, vencimiento +15 días locales y guarda el desglose de pagos. El selector de cliente es solo prefill.
+- **Fixed** — Cobros: pagos parciales/totales actualizan saldo, historial y semáforo; se encola `MOVIMIENTO_COBRO` y `CUENTA_POR_COBRAR`.
+- **Fixed** — Guardián crediticio: semáforo VERDE ≥70, AMARILLO ≥50, ROJO <50; `PARCIAL` cuenta 0.5 en historial; crédito moderado = mín(50% solicitado, 80% promedio).
+- **Fixed** — Inventario: búsqueda insensible a tildes, filtro por categoría, guarda de borrado con stock, ajustes `AJUSTE` a 0 y sincronización de productos/movimientos.
+- **Fixed** — Cierre: efectivo efectivo = ventas efectivo − gastos; `totalTeorico` = efectivo + QR + fiado − gastos; diferencia neutra hasta ingresar efectivo físico.
+- **Fixed** — Moneda entera (RB-001): validaciones y pasos `step=1` en venta, fiado, inventario y cierre; sin decimales.
+- **Fixed** — Backend: `creado_en`/`actualizado_en` inválidos en `CuentaPorCobrar`/`ArqueoCaja`; `gastos_turno` como suma plana.
+- **Fixed** — CORS: `NoDecode` para aceptar orígenes separados por coma o JSON.
+
+### 🚀 Despliegue
+- Primer deploy de Render falló con `ImportError: cannot import name 'NoDecode'` porque `pydantic-settings==2.5.2` no lo incluye.
+- **Fixed** — `backend/requirements.txt`: `pydantic-settings==2.7.1` (verificado en venv limpio con `pydantic==2.9.2`).
+- Render redeploy `dep-dbchblivcj2c738ooc20` → `live`; Vercel producción redeploy manual → `https://cajaviva.vercel.app`.
+
+### 🧪 Verificación
+- Frontend: **148/148 tests**, `npx tsc -b` sin errores, build de producción OK.
+- Backend: **22/22 tests** (`pytest`), incluido reintento de `PROCESANDO`.
+- Producción: health `healthy`, PostgreSQL/Neon conectado (~394 ms), `SyncResponse.resultados` presente.
+- PWA producción: bundle nuevo `assets/index-BuMC8wdD.js`; `/#venta`, `/#fiados`, `/#cierre` y `/#inventario` responden y renderizan.
+- Sync real: producto de prueba creado → sincronizado → visible en Neon; eliminado → sincronizado → ausente en Neon. Dashboard: `Completados=2`, `Errores=0`, `Servidor: Render + Neon`.
+- Deep links verificados en producción; badge de sincronización y base de datos `postgresql`.
+
+### 🌐 URLs públicas
+| Servicio | URL |
+|----------|-----|
+| Frontend (Vercel) | https://cajaviva.vercel.app |
+| Backend (Render) | https://cajaviva-api-xsrs.onrender.com |
+| Health check | https://cajaviva-api-xsrs.onrender.com/api/v1/health |
+| Repositorio | https://github.com/DiegoxdGarcia2/MicroApp |
+
+### 📝 Commits
+- `34f25fc` — feat(caja-viva): cierre de caja, fiados y sync idempotente listos para produccion.
+- `7458121` — fix(backend): pydantic-settings 2.7.1 para `NoDecode` en producción.
+
+---
+
 *Bitácora iniciada: `2026-10-08` — Mantener actualizada en cada Loop completado.*
