@@ -226,4 +226,51 @@ Preparación del backend FastAPI para operación híbrida: SQLite en desarrollo 
 
 ---
 
+---
+
+## [2026-10-21] - ORDEN 9: BÓVEDA DE SECRETOS, MCP DEPLOYER Y DESPLIEGUE EN PRODUCCIÓN (RENDER + VERCEL + NEON)
+
+### 🎯 Contexto
+Cierre de la Orden 9: secretos locales fuera de Git, deployer MCP con auto-sanación y primer despliegue real del stack CajaViva (PWA + API FastAPI + Neon PostgreSQL).
+
+### ✨ Added
+- **Added** — `.ai/mcp/cloud_deployer_mcp.py`: servidor MCP/CLI con `deploy_render_backend()`, `deploy_vercel_frontend(backend_url)` y `fetch_logs_and_heal()`.
+- **Added** — `.ai/mcp/.env.secrets` (ignorado por Git) y `.ai/mcp/.env.mcp.example` (plantilla sin credenciales).
+- **Added** — `.ai/skills/cloud_self_healing_deploy.md`, registrada en `.ai/skills/index.json` (v1.2.0).
+- **Added** — `caja-viva/vercel.json` (rewrites SPA + headers de caché) y `caja-viva/.vercelignore`.
+- **Added** — `backend/.dockerignore` y `backend/render.yaml` de producción (sin base de datos ficticia).
+
+### 🔧 Changed
+- **Updated** — `.gitignore` raíz y `caja-viva/.gitignore`: `.env`, `.env.*`, `!.env.example`, `!.env.mcp.example`, `.ai/mcp/.env.secrets`, `*.secrets`, `*.pem`, `dev-dist/`.
+- **Updated** — `backend/app/core/database.py`: sanitización de DSN (`sslmode`, `channel_binding`, `ssl`, `options`), `SSLContext`, `statement_cache_size=0` para hosts `-pooler` y pool reciclado cada 30 min.
+- **Updated** — `backend/Dockerfile`: `${PORT:-8000}` y healthcheck usando `$PORT`.
+- **Updated** — Frontend: navegación por URL (`/`, `/#venta`, `/#inventario`, `/#fiados` + deep links), sidebar con estado activo y botón «← Inicio».
+- **Fixed** — `CarritoPanel`: `setValidation()` durante el render provocaba loop infinito (React #301); ahora la validación es derivada.
+- **Updated** — Dashboard: demo de 10 productos típicos de Santa Cruz, badge de sincronización real y acciones rápidas navegables sin duplicados.
+
+### 🌐 URLs públicas
+| Servicio | URL |
+|----------|-----|
+| Frontend (Vercel) | https://cajaviva.vercel.app |
+| Backend (Render) | https://cajaviva-api-xsrs.onrender.com |
+| Health check | https://cajaviva-api-xsrs.onrender.com/api/v1/health |
+| Dashboard Render | https://dashboard.render.com/web/srv-dbcfvqpkjs5s73cidoeg |
+| Repositorio | https://github.com/DiegoxdGarcia2/MicroApp |
+
+### 🧪 Verificación
+- `GET /api/v1/health`: `status=healthy`, `db_status=connected`, `db_engine=postgresql`, `db_latency_ms≈371` (Neon PostgreSQL).
+- Vercel: `/` y `/inventario` responden `200`; el bundle de producción contiene `VITE_API_URL=https://cajaviva-api-xsrs.onrender.com`.
+- PWA en producción: badge «Sincronizado», «Servidor: Render + Neon», «Base de datos: postgresql · 371 ms».
+- Demo: 10 productos cargados en producción; carrito suma el producto y «Cobrar» refleja el total.
+- TypeScript `tsc -b` sin errores; build de producción OK; backend `pytest` 18/18.
+- `git check-ignore -v .ai/mcp/.env.secrets` confirma que la bóveda está ignorada; ningún secreto fue stageado.
+
+### 📝 Notas / Aprendizajes
+- Render free duerme tras ~15 min y Neon free autosuspende: el primer hit puede tardar ~50 s.
+- `npm run build` local necesita `--script-shell=cmd.exe` por la configuración npm de esta máquina; el builder Linux de Vercel no requiere el flag.
+- Vitest: 118/134 (16 fallos preexistentes de mocks/fechas, ajenos al despliegue).
+- Commits del despliegue: `04a6286`, `ddded41`, `685468d`, `1085712`, `cd3fdb6`.
+
+---
+
 *Bitácora iniciada: `2026-10-08` — Mantener actualizada en cada Loop completado.*

@@ -84,6 +84,22 @@ graph TD
 | **T-006** | Sync Engine Backend FastAPI | ✅ **DONE** | 2026-10-11 |
 | **T-007** | Guardián Crediticio IA + Seguridad Crediticia | ✅ **DONE** | 2026-10-11 |
 | **INFRA** | Backend Híbrido SQLite/Neon + Docker + Deploy | ✅ **DONE** | 2026-10-11 |
+| **DEPLOY** | Producción Render + Vercel + Neon (Orden 9) | ✅ **DONE** | 2026-10-21 |
+
+---
+
+## 🌐 URLS DE PRODUCCIÓN (CAJAVIVA)
+
+| Servicio | URL | Estado |
+|----------|-----|--------|
+| **PWA (Vercel)** | https://cajaviva.vercel.app | ✅ Live |
+| **API (Render)** | https://cajaviva-api-xsrs.onrender.com | ✅ Live |
+| **Health check** | https://cajaviva-api-xsrs.onrender.com/api/v1/health | ✅ `healthy` + Neon |
+| **Dashboard Render** | https://dashboard.render.com/web/srv-dbcfvqpkjs5s73cidoeg | ✅ Live |
+| **Repositorio** | https://github.com/DiegoxdGarcia2/MicroApp | ✅ Público |
+
+> **Cuenta demo:** el dashboard incluye el botón «Cargar Datos de Demostración» con 10 productos típicos de Santa Cruz de la Sierra (idempotente, no duplica).
+> **Nota:** Render free duerme tras ~15 min y Neon free autosuspende; el primer acceso puede tardar ~50 s.
 
 ---
 
@@ -119,10 +135,10 @@ graph TD
 1. ✅ **Definir primera aplicación** → **CajaViva** (Completado)
 2. ✅ **Registrar especificación** → `[[CajaViva - Especificacion.md]]`
 3. ✅ **Registrar ADR** → `[[ADR-0001 - Arquitectura Offline-First y Stack de CajaViva.md]]`
-4. **Inicializar repo Git** + CI/CD pipeline para CajaViva
+4. ✅ **Repo Git + CI/CD + Deploy** → Render + Vercel + Neon completado (2026-10-21)
 5. **Lead Engineer (Tier 2)**: Desglose de 5-6 tareas atómicas desde Loop Spec Fase 3
 6. **Ejecutar primer Loop TDD** → Dev Agents (Tier 3)
 
 ---
 
-*Última sincronización: `2026-10-11` — Generado automáticamente por Chief Architect Orchestrator*
+*Última sincronización: `2026-10-21` — Generado automáticamente por Chief Architect Orchestrator*
