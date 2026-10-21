@@ -1,0 +1,47 @@
+# ============================================
+# SECRETOS Y VARIABLES DE ENTORNO
+# PROHIBIDO SUBIR AL REPO
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.mcp.example
+.ai/mcp/.env.secrets
+*.secrets
+*.pem
+
+# ============================================
+# PYTHON / BACKEND
+# ============================================
+backend/__pycache__/
+backend/**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.pytest_cache/
+backend/*.db
+backend/*.sqlite*
+
+# ============================================
+# NODE / FRONTEND
+# ============================================
+node_modules*/
+dist/
+dist-ssr/
+.vite/
+.vercel/
+coverage/
+*.local
+
+# ============================================
+# OS / EDITORES
+# ============================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ============================================
+# LOGS
+# ============================================
+*.log

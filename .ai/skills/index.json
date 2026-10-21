@@ -1,0 +1,70 @@
+{
+  "version": "1.2.0",
+  "updated": "2026-10-21T12:00:00Z",
+  "skills": [
+    {
+      "id": "ui_ux_nextlevelbuilder",
+      "name": "UI/UX (NextLevelBuilder)",
+      "description": "Diseño de interfaces con personalidad, design tokens, Thinking Orbs (estados animados MIT), tipografía WCAG AAA, micro-interacciones core.",
+      "file": "ui_ux_nextlevelbuilder.md",
+      "tags": ["frontend", "design-system", "accessibility", "react", "nextjs", "thinking-orbs", "design-tokens"],
+      "trigger_keywords": ["ui", "ux", "diseño", "interfaz", "accesibilidad", "design system", "componentes", "tokens", "thinking orbs", "animación"]
+    },
+    {
+      "id": "copywriting_corey_haines",
+      "name": "Copywriting (Corey Haines)",
+      "description": "Estructura conversión Problema→Consecuencia→Alivio, prohibición clichés corporativos, CTA beneficio inmediato, microcopy accionable.",
+      "file": "copywriting_corey_haines.md",
+      "tags": ["copywriting", "marketing", "conversion", "landing-page", "email", "onboarding", "cta", "microcopy"],
+      "trigger_keywords": ["copy", "texto", "landing", "email", "onboarding", "conversión", "microcopy", "propuesta de valor", "cta", "clichés"]
+    },
+    {
+      "id": "meta_prompts_nidhinjs",
+      "name": "Meta-Prompts (NidhinJS)",
+      "description": "Patrones descomposición analítica subagentes, restricciones negativas, few-shot determinista, CoT estructurado, self-consistency, eval sets.",
+      "file": "meta_prompts_nidhinjs.md",
+      "tags": ["prompt-engineering", "llm", "optimization", "evaluation", "few-shot", "cot", "subagents", "guardrails"],
+      "trigger_keywords": ["prompt", "optimización", "few-shot", "chain-of-thought", "evaluación", "meta-prompt", "subagente", "descomposición"]
+    },
+    {
+      "id": "lead_scraper_scrapegraphai",
+      "name": "Lead Scraper (ScrapeGraphAI + Firecrawl)",
+      "description": "Extracción leads web dual engine (Firecrawl estático, ScrapeGraphAI dinámico), salida dual JSON local + notas Obsidian, deduplicación, CLI.",
+      "file": "lead_scraper_scrapegraphai.md",
+      "tags": ["scraping", "leads", "firecrawl", "scrapegraphai", "obsidian", "data-extraction", "ollama"],
+      "trigger_keywords": ["scraping", "leads", "extracción", "firecrawl", "scrapegraphai", "obsidian", "prospectos", "datos web"]
+    },
+    {
+      "id": "legal_compliance",
+      "name": "Auditoría Legal y Compliance (COPPA, GDPR, Local)",
+      "description": "COPPA menores 13 años (age-gate + consentimiento paterno), GDPR/LOPD (ROPA, DPIA, derechos Arts.15-22, DPA), ePrivacy cookies v2, fuentes locales, retención automatizada.",
+      "file": "legal_compliance.md",
+      "tags": ["legal", "compliance", "gdpr", "coppa", "privacidad", "lgpd", "dpa", "cookies", "ropa", "dpia", "age-gate"],
+      "trigger_keywords": ["legal", "compliance", "gdpr", "coppa", "privacidad", "consentimiento", "cookies", "menores", "dpa", "ropa", "dpia", "fuentes locales"]
+    },
+    {
+      "id": "launch_checklist",
+      "name": "Checklist Lanzamiento Web (20 pts — SEO, Schema.org, CWV)",
+      "description": "20 checks automatizados en CI/CD: SEO técnico (5), Schema.org (4), Core Web Vitals (5), Seguridad/Headers/A11y (4), Operaciones (2). Script bash + GitHub Actions listo.",
+      "file": "launch_checklist.md",
+      "tags": ["seo", "launch", "schema.org", "core-web-vitals", "performance", "security", "accessibility", "ci-cd", "lighthouse"],
+      "trigger_keywords": ["lanzamiento", "launch", "seo", "schema", "core web vitals", "sitemap", "robots", "meta tags", "open graph", "security headers", "accesibilidad", "lighthouse"]
+    },
+    {
+      "id": "quality_auditor_legal_launch",
+      "name": "Quality Auditor, Legal Shield, Thinking Orbs & Launch Certifier",
+      "description": "Auditoría pre-deploy: Escudo legal 5 riesgos (COPPA, GDPR fuentes, session replay, Stripe, DMCA), Launch Checklist 20pts, Thinking Orbs validation, Modelo comercial. Genera certificado formal en Obsidian.",
+      "file": "quality_auditor_legal_launch.md",
+      "tags": ["audit", "legal", "compliance", "launch", "quality", "thinking-orbs", "certification", "coppa", "gdpr", "stripe", "dmca"],
+      "trigger_keywords": ["auditoría", "audit", "legal", "lanzamiento", "launch", "calidad", "certificado", "thinking orbs", "escudo legal", "pre-deploy", "certificación"]
+    },
+    {
+      "id": "cloud_self_healing_deploy",
+      "name": "Cloud Self-Healing Deploy (Render + Vercel + Neon)",
+      "description": "Despliegue seguro con bóveda local git-ignored, MCP deployer (Render Docker + Neon, Vercel SPA + VITE_API_URL), lectura de logs, parches deterministas y reintento hasta 100% green sin filtrar credenciales.",
+      "file": "cloud_self_healing_deploy.md",
+      "tags": ["devops", "deploy", "render", "vercel", "neon", "mcp", "secrets", "self-healing", "docker", "pwa"],
+      "trigger_keywords": ["deploy", "despliegue", "render", "vercel", "neon", "producción", "auto-healing", "self-healing", "logs de build", ".env.secrets", "api key"]
+    }
+  ]
+}

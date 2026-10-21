@@ -1,0 +1,5 @@
+# robots.txt for CajaViva
+User-agent: *
+Allow: /
+
+Sitemap: https://cajaviva.app/sitemap.xml

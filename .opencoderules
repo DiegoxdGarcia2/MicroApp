@@ -1,0 +1,51 @@
+# REGLAS GLOBALES DEL ORQUESTADOR - MICROAPPS WORKSPACE
+
+## 1. JERARQUÍA DE AUTORIDAD
+- **Chief Architect (Tier 1):** Decide stack, arquitectura, contratos, ADR. No escribe código de implementación masivo.
+- **Lead Engineer (Tier 2):** Descompone ADR en tareas atómicas, gestiona PRs, code review, CI/CD.
+- **Developer Agents (Tier 3):** Ejecutan tareas atómicas (TDD obligatorio), reportan diffs.
+
+## 2. PROTOCOLO DE EJECUCIÓN (LOOP SPEC)
+Toda feature pasa por 5 fases obligatorias antes de escribir código:
+1. Diagnóstico y Decisión Arquitectónica (ADR)
+2. Esquema de Datos y Contratos I/O (Pydantic/Django Models + OpenAPI)
+3. Desglose de Tareas Atómicas (Backlog numerado, max 6 pasos)
+4. Estrategia de Pruebas (TDD: test first, implement, refactor)
+5. Registro en Bóveda Obsidian (MOC + ADR + Changelog)
+
+## 3. ESTÁNDARES DE CÓDIGO
+- **Python:** Ruff + Black + MyPy (strict). Async por defecto (FastAPI) salvo admin Django.
+- **TypeScript:** ESLint + Prettier + tsc strict. React Server Components first (Next.js App Router).
+- **Commits:** Conventional Commits + DCO sign-off.
+- **Branching:** Trunk-based con feature flags. `main` siempre deployable.
+
+## 4. GESTIÓN DE CONOCIMIENTO (OBSIDIAN MCP)
+- Cada decisión arquitectónica → `docs/02 - Arquitectura del Sistema/[App] - Decisiones Arquitectura (ADR).md`
+- Cada requerimiento → `docs/01 - Requisitos y Casos de Uso/[App] - Especificacion.md`
+- Cada cambio relevante → `docs/06 - Bitacora y Memoria de Cambios/Historial.md`
+- Índice maestro → `docs/00 - Indice Principal (MOC)/Indice.md`
+
+## 5. SKILLS DISPONIBLES (BAJO DEMANDA)
+- `UI/UX (NextLevelBuilder)` — Diseño de interfaces, sistemas de diseño, accesibilidad.
+- `Copywriting (Corey Haines)` — Microcopy, landing pages, onboarding, emails.
+- `Meta-Prompts (NidhinJS)` — Optimización de prompts, few-shot, chain-of-thought.
+- `Auditoría Legal (COPPA, GDPR, Local)` — Privacidad, consentimiento, compliance.
+- `Checklist Lanzamiento Web (20 pts)` — SEO técnico, Schema.org, Core Web Vitals, seguridad.
+
+## 6. PRINCIPIOS NO NEGOCIABLES
+- **Seguridad by default:** Zero-trust, least privilege, secrets en vault (nunca en repo).
+- **Observabilidad nativa:** Logs estructurados (JSON), métricas (Prometheus), tracing (OTel).
+- **Documentación viva:** Código y docs en mismo PR. Sin docs = PR bloqueado.
+- **Performance budgets:** LCP < 2.5s, TTI < 3.5s, API p99 < 200ms.
+
+## 7. FLUJO DE TRABAJO ESTÁNDAR
+```mermaid
+graph LR
+    A[Idea/Req] --> B[Chief Architect: ADR + Spec]
+    B --> C[Lead Engineer: Task Breakdown]
+    C --> D[Dev Agent: TDD Loop]
+    D --> E[Review + CI Gates]
+    E --> F[Merge + Deploy Preview]
+    F --> G[Obsidian Sync]
+    G --> H[Changelog Update]
+```

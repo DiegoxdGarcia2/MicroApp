@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-surface: #FAFAFA;
+    --color-surface-alt: #F0F0F5;
+    --color-surface-dark: #1A1A2E;
+    --text-primary: #1A1A2E;
+    --text-secondary: #3D3D5C;
+    --text-muted: #6B6B8A;
+    --text-inverse: #FAFAFA;
+    --color-primary-50: #EEF0FA;
+    --color-primary-100: #DCE0F5;
+    --color-primary-400: #6B7CE8;
+    --color-primary-500: #4A5BD8;
+    --color-primary-600: #3A4ACC;
+    --color-primary-700: #2D3BB8;
+    --color-green-500: #10B981;
+    --color-red-500: #EF4444;
+    --color-amber-500: #F59E0B;
+  }
+
+  * {
+    @apply border-surface-alt;
+  }
+
+  body {
+    @apply bg-surface text-body text-primary antialiased;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .thinking-orb {
+    @apply relative inline-flex items-center justify-center rounded-full transition-colors duration-300;
+    width: var(--orb-size, 40px);
+    height: var(--orb-size, 40px);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--orb-color), 0 4px 12px -2px var(--orb-color);
+  }
+
+  .thinking-orb::before {
+    content: '';
+    @apply absolute rounded-full;
+    width: 100%;
+    height: 100%;
+    background: currentColor;
+    opacity: 0.15;
+  }
+
+  .thinking-orb[data-state="thinking"] {
+    animation: orb-pulse 1.5s ease-in-out infinite, orb-rotate 4s linear infinite;
+  }
+
+  .thinking-orb[data-state="processing"] {
+    animation: orb-spin 1s linear infinite, orb-pulse 0.8s ease-in-out infinite;
+  }
+
+  .thinking-orb[data-state="success"] {
+    animation: orb-pop 300ms ease-out forwards;
+  }
+
+  .thinking-orb[data-state="error"] {
+    animation: orb-shake 400ms ease-in-out, orb-pulse 200ms 2;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-lg font-semibold text-base bg-primary-600 text-white
+           hover:bg-primary-700 active:bg-primary-800
+           focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
+           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-lg font-medium text-base
+           bg-transparent border-2 border-primary-600 text-primary-600
+           hover:bg-primary-50 active:bg-primary-100
+           focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2
+           transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-lg border-2 border-surface-alt
+           bg-surface text-primary placeholder:text-muted
+           focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20
+           transition-colors duration-150;
+  }
+
+  .card {
+    @apply bg-surface rounded-xl border border-surface-alt shadow-sm p-6;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

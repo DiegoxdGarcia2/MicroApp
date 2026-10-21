@@ -1,0 +1,228 @@
+{
+  "nodes": [
+    {
+      "id": "node-entrada-usuario",
+      "type": "group",
+      "x": 0,
+      "y": 0,
+      "width": 400,
+      "height": 600,
+      "color": "1",
+      "label": "🟦 Grupo 1: Entrada & Usuario",
+      "children": [
+        "node-formulario",
+        "node-interaccion-inicial",
+        "node-auth"
+      ]
+    },
+    {
+      "id": "node-formulario",
+      "type": "text",
+      "x": 50,
+      "y": 80,
+      "width": 300,
+      "height": 120,
+      "color": "3",
+      "text": "## 📝 Formulario de Entrada\n\n- Input validado (Zod/Pydantic)\n- Sanitización XSS/Injection\n- Rate limiting por IP/sesión\n- Captcha invisible (Turnstile/hCaptcha)\n- **Contrato:** `POST /api/v1/entrada`\n  ```json\n  { \"datos\": {}, \"metadata\": { \"ua\", \"ip_hash\" } }\n  ```"
+    },
+    {
+      "id": "node-interaccion-inicial",
+      "type": "text",
+      "x": 50,
+      "y": 240,
+      "width": 300,
+      "height": 120,
+      "color": "3",
+      "text": "## 🎯 Interacción Inicial\n\n- Landing / Hero section\n- Value prop cuantificada\n- CTA primario + secundario\n- Tracking consent (GDPR Art. 7)\n- **Analytics:** Event `entrada_iniciada`\n- **A11y:** Focus visible, ARIA labels"
+    },
+    {
+      "id": "node-auth",
+      "type": "text",
+      "x": 50,
+      "y": 400,
+      "width": 300,
+      "height": 120,
+      "color": "3",
+      "text": "## 🔐 Autenticación / Identidad\n\n- Magic Link / Email OTP\n- OAuth2: Google, Microsoft, GitHub\n- JWT Access (15min) + Refresh (30d)\n- RBAC: roles + permissions\n- **COPPA:** Age-gate < 13 → parental flow\n- **Tokens:** HttpOnly Secure SameSite=Strict"
+    },
+    {
+      "id": "node-cockpit-ui",
+      "type": "group",
+      "x": 450,
+      "y": 0,
+      "width": 400,
+      "height": 600,
+      "color": "2",
+      "label": "🟨 Grupo 2: Cockpit UI & Thinking Orbs",
+      "children": [
+        "node-cockpit-layout",
+        "node-thinking-orbs",
+        "node-estados-visuales"
+      ]
+    },
+    {
+      "id": "node-cockpit-layout",
+      "type": "text",
+      "x": 500,
+      "y": 80,
+      "width": 300,
+      "height": 140,
+      "color": "4",
+      "text": "## 🖥️ Cockpit Layout (Next.js App Router)\n\n- **Server Components** por defecto\n- **Client Components** solo interactividad\n- Layout: Sidebar + Header + Main + Orbs Bar\n- Design Tokens: CSS Variables + Tailwind\n- **Responsive:** Mobile-first (320px → 1440px)\n- **Dark Mode:** `next-themes` + `prefers-color-scheme`"
+    },
+    {
+      "id": "node-thinking-orbs",
+      "type": "text",
+      "x": 500,
+      "y": 260,
+      "width": 300,
+      "height": 160,
+      "color": "5",
+      "text": "## ⚛️ Thinking Orbs (MIT License)\n\n**Componente:** `ThinkingOrbGroup`\n\n| Orb | Estado | Animación | Color Token |\n|-----|--------|-----------|-------------|\n| 1 | `thinking` | Pulse 1.5s + Rotate 4s | `--orb-thinking` |\n| 2 | `processing` | Spin 1s + Pulse 0.8s | `--orb-processing` |\n| 3 | `success` | Pop 300ms + Checkmark | `--orb-success` |\n| 4 | `error` | Shake 400ms + Pulse 2x | `--orb-error` |\n\n**Accesibilidad:** `aria-live`, `prefers-reduced-motion`"
+    },
+    {
+      "id": "node-estados-visuales",
+      "type": "text",
+      "x": 500,
+      "y": 460,
+      "width": 300,
+      "height": 100,
+      "color": "4",
+      "text": "## 📊 Estados Visuales Sincronizados\n\n- **Step 1:** Validando entrada → Orb 1\n- **Step 2:** Procesando lógica → Orb 2\n- **Step 3:** Sincronizando bóveda → Orb 3\n- **Global:** Error boundary → Orb 4\n- **WebSocket/SSE:** Updates tiempo real"
+    },
+    {
+      "id": "node-backend-logica",
+      "type": "group",
+      "x": 900,
+      "y": 0,
+      "width": 400,
+      "height": 600,
+      "color": "3",
+      "label": "🟩 Grupo 3: Backend & Lógica (FastAPI/Django)",
+      "children": [
+        "node-fastapi-endpoints",
+        "node-validaciones-contratos",
+        "node-logica-negocio"
+      ]
+    },
+    {
+      "id": "node-fastapi-endpoints",
+      "type": "text",
+      "x": 950,
+      "y": 80,
+      "width": 300,
+      "height": 140,
+      "color": "6",
+      "text": "## ⚡ FastAPI Endpoints (Async First)\n\n```python\n# Routers modulares\n/api/v1/entrada      → POST validación + cola\n/api/v1/proceso      → GET status + WebSocket\n/api/v1/resultado    → GET output + download\n/api/v1/gdpr/*       → Rights Arts. 15-22\n/api/v1/health       → Liveness/Readiness\n```\n\n- **OpenAPI 3.1** auto-generado\n- **Pydantic v2** schemas strict\n- **Dependency Injection** repos/services"
+    },
+    {
+      "id": "node-validaciones-contratos",
+      "type": "text",
+      "x": 950,
+      "y": 260,
+      "width": 300,
+      "height": 140,
+      "color": "6",
+      "text": "## ✅ Validaciones & Contratos\n\n- **Input:** Pydantic models + custom validators\n- **Business Rules:** Service layer (no en endpoints)\n- **Output:** Typed dicts + `model_dump(mode='json')`\n- **Errors:** `HTTPException` + `ProblemDetail` (RFC 9457)\n- **Contracts:** `schemas/` compartidos FE/BE\n- **Testing:** Contract tests (Pact) en CI"
+    },
+    {
+      "id": "node-logica-negocio",
+      "type": "text",
+      "x": 950,
+      "y": 440,
+      "width": 300,
+      "height": 120,
+      "color": "6",
+      "text": "## ⚙️ Lógica de Negocio (Clean Architecture)\n\n- **Use Cases:** Single responsibility\n- **Entities:** Domain models (no ORM)\n- **Repositories:** Interface + Implementaciones\n- **Events:** Domain events → Message bus\n- **Tasks:** Celery/RQ para trabajo pesado\n- **Idempotency:** Keys en mutaciones críticas"
+    },
+    {
+      "id": "node-persistencia-boveda",
+      "type": "group",
+      "x": 1350,
+      "y": 0,
+      "width": 400,
+      "height": 600,
+      "color": "4",
+      "label": "🟪 Grupo 4: Persistencia & Bóveda Obsidian",
+      "children": [
+        "node-base-datos",
+        "node-boveda-obsidian",
+        "node-sincronizacion"
+      ]
+    },
+    {
+      "id": "node-base-datos",
+      "type": "text",
+      "x": 1400,
+      "y": 80,
+      "width": 300,
+      "height": 140,
+      "color": "1",
+      "text": "## 🗄️ Base de Datos Local\n\n- **PostgreSQL 16** (Supabase/Neon/Local)\n- **Asyncpg** + SQLAlchemy 2.0 async\n- **Migraciones:** Alembic (versionadas)\n- **Esquemas:**\n  - `public`: usuarios, sesiones, auditoría\n  - `app`: entidades dominio\n  - `analytics`: eventos, métricas\n- **RLS:** Row Level Security multi-tenant\n- **Backups:** Point-in-time + pg_dump diario"
+    },
+    {
+      "id": "node-boveda-obsidian",
+      "type": "text",
+      "x": 1400,
+      "y": 260,
+      "width": 300,
+      "height": 160,
+      "color": "5",
+      "text": "## 📚 Bóveda Obsidian (MCP Memory)\n\n```\ndocs/\n├── 00 - Indice Principal (MOC)/\n│   └── Indice.md              ← MOC maestro\n├── 01 - Requisitos y Casos de Uso/\n│   └── [App] - Especificacion.md\n├── 02 - Arquitectura del Sistema/\n│   ├── ADR-XXXX - [Título].md   ← Decisiones\n│   └── Mapa de Arquitectura.canvas ← ESTE ARCHIVO\n├── 05 - Bugs y Lecciones Aprendidas/\n│   └── BUG-XXXX - [Nombre].md\n├── 06 - Bitacora y Memoria de Cambios/\n│   └── Historial.md             ← Changelog append-only\n└── 07 - Leads/\n    └── [Lead] - [Cargo] @ [Empresa].md\n```"
+    },
+    {
+      "id": "node-sincronizacion",
+      "type": "text",
+      "x": 1400,
+      "y": 460,
+      "width": 300,
+      "height": 100,
+      "color": "1",
+      "text": "## 🔄 Sincronización Automática\n\n- **Post-Look Hook:** Tier 2-MCP\n  - ADR → `docs/02/ADR-XXXX.md`\n  - Changelog → `docs/06/Historial.md`\n  - Canvas → Update nodes/edges\n  - Bugs >1 fix → `docs/05/BUG-XXXX.md`\n  - MOC → Wikilinks actualizados\n- **Git:** Pre-commit valida docs modified"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1-2",
+      "fromNode": "node-formulario",
+      "toNode": "node-cockpit-layout",
+      "label": "HTTP/REST\nPOST /api/v1/entrada\nJSON",
+      "color": "5"
+    },
+    {
+      "id": "edge-2-3",
+      "fromNode": "node-cockpit-layout",
+      "toNode": "node-fastapi-endpoints",
+      "label": "HTTP/REST + WebSocket\nValidación → Proceso → Resultado\nJSON + Server-Sent Events",
+      "color": "5"
+    },
+    {
+      "id": "edge-3-4",
+      "fromNode": "node-fastapi-endpoints",
+      "toNode": "node-base-datos",
+      "label": "SQL/Asyncpg\nTransacciones ACID\nConnection Pool",
+      "color": "6"
+    },
+    {
+      "id": "edge-4-5",
+      "fromNode": "node-base-datos",
+      "toNode": "node-boveda-obsidian",
+      "label": "MCP Sync\nEvent-driven\nMarkdown + JSON",
+      "color": "4"
+    },
+    {
+      "id": "edge-2-5",
+      "fromNode": "node-cockpit-layout",
+      "toNode": "node-sincronizacion",
+      "label": "Obsidian API\nFile watcher\nGit auto-commit",
+      "color": "4"
+    },
+    {
+      "id": "edge-auth-backend",
+      "fromNode": "node-auth",
+      "toNode": "node-fastapi-endpoints",
+      "label": "JWT Bearer Token\nRBAC Validation\nRate Limit",
+      "color": "3"
+    }
+  ]
+}
