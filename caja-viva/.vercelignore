@@ -1,0 +1,14 @@
+node_modules
+node_modules.broken
+dist
+coverage
+.vite
+.vercel
+*.log
+
+# Nunca subir secretos al build de Vercel
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development

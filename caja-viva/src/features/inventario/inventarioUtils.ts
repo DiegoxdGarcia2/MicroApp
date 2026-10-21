@@ -1,5 +1,3 @@
-import type { Producto, GastoTurno, MovimientoStock } from '../../db/types';
-
 export interface StockStatus {
   type: 'OK' | 'BAJO' | 'AGOTADO';
   label: string;
@@ -132,7 +130,7 @@ export function validateProduct(producto: Partial<{
   costo: number;
   stock_actual: number;
   stock_minimo: number;
-  codigo_barras: string;
+  codigo_barras: string | null;
 }>): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 

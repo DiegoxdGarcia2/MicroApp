@@ -1,7 +1,5 @@
-import { useState, useCallback } from 'react';
-import { MovimientoStock } from '../../db/types';
-import { Layout, PageHeader, Card, CardHeader, btn-primary, btn-secondary, input-field } from '../../components/layout/Layout';
-import { ThinkingOrb } from '../../components/common/ThinkingOrb';
+import { useState } from 'react';
+import { Card, CardHeader } from '../../components/layout/Layout';
 
 interface AjusteStockModalProps {
   isOpen: boolean;
@@ -200,8 +198,8 @@ export function AjusteStockModal({
                   `Registrar ${tipo === 'ENTRADA' ? 'Entrada' : tipo === 'SALIDA' ? 'Salida' : tipo === 'MERMA' ? 'Merma' : 'Ajuste'}`
                 )}
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>

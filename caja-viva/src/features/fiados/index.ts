@@ -41,11 +41,7 @@ export {
   generateSalvavidasScript,
   type SalvavidasScriptType,
   type SalvavidasScript,
-  
-  // Hooks
-  useLimiteGlobalFiados,
-  useCurrentFiadosTotal,
-  
-  // Format
-  formatBs,
 } from './creditGuardianUtils';
+
+// Hooks de limite global (usan el store de IndexedDB)
+export { useLimiteGlobalFiados, useCurrentFiadosTotal } from './useLimiteGlobalFiados';

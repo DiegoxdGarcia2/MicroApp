@@ -1,29 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Producto } from '../../db/types';
 import { productoRepository, movimientoStockRepository } from '../../db/repositories';
-import { 
-  calculateStockStatus, 
-  getStockStatusInfo, 
-  calculateInventoryValue,
-  filterProducts, 
-  sortProducts,
-  validateProduct,
-  generateStockAlert,
-} from './inventarioUtils';
+import { sortProducts } from './inventarioUtils';
 import { ProductoFormModal } from './ProductoFormModal';
 import { AjusteStockModal } from './AjusteStockModal';
-import { Layout, PageHeader, Card, CardHeader } from '../../components/layout/Layout';
+import { Layout, PageHeader, Card } from '../../components/layout/Layout';
 import { StockBadge } from '../../components/common/StockBadge';
 
 export function InventarioPage() {
   const [productos, setProductos] = useState<Array<any>>([]);
   const [categorias, setCategorias] = useState<string[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [cargandoProductos, setCargandoProductos] = useState(false);
+  const [, setCargandoProductos] = useState(false);
   const [query, setQuery] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState<string>('Todos');
   const [stockFilter, setStockFilter] = useState<'Todos' | 'OK' | 'BAJO' | 'AGOTADO'>('Todos');
-  const [ordenCampo, setOrdenCampo] = useState<keyof any>('nombre');
+  const [ordenCampo, setOrdenCampo] = useState<'nombre' | 'precio_venta' | 'stock_actual' | 'categoria'>('nombre');
   const [ordenDireccion, setOrdenDireccion] = useState<'asc' | 'desc'>('asc');
 
   // Modals
@@ -80,7 +71,6 @@ export function InventarioPage() {
 
     // Filtro búsqueda
     if (query.trim()) {
-      const lower = query.toLowerCase();
       resultado = resultado.filter(p => 
         p.nombre.toLowerCase().includes(query.toLowerCase()) ||
         p.codigo_barras?.toLowerCase().includes(query.toLowerCase()) ||
@@ -109,12 +99,6 @@ export function InventarioPage() {
   }, [productos, query, categoriaActiva, stockFilter, ordenCampo, ordenDireccion]);
 
   // Stats derivados
-  const productosConAlerta = productos.filter(p => {
-    const status = p.stock_actual === 0 ? 'AGOTADO' : 
-                   p.stock_actual <= p.stock_minimo ? 'BAJO' : 'OK';
-    return status !== 'OK';
-  });
-
   const handleAbrirFormulario = (producto?: any) => {
     if (producto) {
       setEditandoProducto(producto);
@@ -173,7 +157,7 @@ export function InventarioPage() {
     }
   };
 
-  const handleOrdenChange = (campo: keyof any) => {
+  const handleOrdenChange = (campo: 'nombre' | 'precio_venta' | 'stock_actual' | 'categoria') => {
     if (ordenCampo === campo) {
       setOrdenDireccion(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
@@ -210,7 +194,7 @@ export function InventarioPage() {
             </svg>
             Nuevo Producto
           </button>
-        />
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
@@ -309,7 +293,7 @@ export function InventarioPage() {
             </select>
             <select
               value={ordenCampo}
-              onChange={(e) => setOrdenCampo(e.target.value as any)}
+              onChange={(e) => setOrdenCampo(e.target.value as 'nombre' | 'precio_venta' | 'stock_actual' | 'categoria')}
               className="input-field py-2 w-full sm:w-36"
               aria-label="Ordenar por"
             >
@@ -368,9 +352,6 @@ export function InventarioPage() {
                 </tr>
               ) : (
                 productosFiltrados.map(producto => {
-                  const stockStatus = calculateStockStatus(producto);
-                  const stockInfo = getStockStatusInfo(producto);
-                  
                   return (
                     <tr key={producto.id} className="hover:bg-surface-alt transition-colors">
                       <td className="px-4 py-4">
@@ -441,7 +422,8 @@ export function InventarioPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })
               )}
             </tbody>
           </table>

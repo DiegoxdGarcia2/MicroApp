@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { calculateGlobalFiadosLimit, getGlobalLimitAlertLevel, type GlobalLimitResult, type GlobalAlertLevel } from './creditGuardianUtils';
-
 interface UseLimiteGlobalFiadosOptions {
   inventoryValue: number;
   monthlyCashFlow: number;
   customPercentage?: number;
-  customLimit?: number;
+  customLimit?: number | null;
 }
 
 interface UseLimiteGlobalFiadosReturn {
@@ -45,28 +44,27 @@ export function useLimiteGlobalFiados({
   inventoryValue: initialInventory,
   monthlyCashFlow: initialCashFlow,
   customPercentage = 0.15,
-  customLimit = null,
+  customLimit: customLimitInicial = null,
 }: UseLimiteGlobalFiadosOptions): UseLimiteGlobalFiadosReturn {
   // Estado de configuración
   const [inventoryValue, setInventoryValue] = useState(initialInventory);
   const [monthlyCashFlow, setMonthlyCashFlow] = useState(initialCashFlow);
   const [percentage, setPercentage] = useState(customPercentage);
-  const [customLimit, setCustomLimit] = useState<number | null>(customLimit);
+  const [customLimit, setCustomLimitState] = useState<number | null>(customLimitInicial);
   
   // Estado de fiados actuales (se actualiza desde el store de cuentas_cobrar)
   const [currentFiados, setCurrentFiados] = useState(0);
 
-  // Calcular límite global
-  const globalLimit = customLimit 
-    ? {
-        limit: customLimit,
-        percentage: 100,
-        capitalActivo: inventoryValue + monthlyCashFlow,
-        inventoryValue,
-        cashFlow: monthlyCashFlow,
-        appliedPercentage: 0,
-      }
-    : calculateGlobalFiadosLimit(inventoryValue, monthlyCashFlow, percentage);
+  // Calcular límite global (customLimit manual o % automático del capital)
+  const autoLimit = calculateGlobalFiadosLimit(inventoryValue, monthlyCashFlow, percentage);
+  const globalLimit: GlobalLimitResult = {
+    limit: customLimit ?? autoLimit,
+    percentage: customLimit !== null ? 100 : Math.round(percentage * 100),
+    capitalActivo: inventoryValue + monthlyCashFlow,
+    inventoryValue,
+    cashFlow: monthlyCashFlow,
+    appliedPercentage: customLimit !== null ? 0 : Math.round(percentage * 100),
+  };
 
   // Calcular nivel de alerta
   const alertLevel = getGlobalLimitAlertLevel(currentFiados, globalLimit.limit);
@@ -88,15 +86,15 @@ export function useLimiteGlobalFiados({
 
   const updatePercentage = useCallback((value: number) => {
     setPercentage(Math.max(0.01, Math.min(1, value))); // Entre 1% y 100%
-    setCustomLimit(null); // Reset custom limit al cambiar porcentaje
+    setCustomLimitState(null); // Reset custom limit al cambiar porcentaje
   }, []);
 
   const setCustomLimit = useCallback((limit: number | null) => {
-    setCustomLimit(limit);
+    setCustomLimitState(limit);
   }, []);
 
   const resetToAuto = useCallback(() => {
-    setCustomLimit(null);
+    setCustomLimitState(null);
     setPercentage(customPercentage);
   }, [customPercentage]);
 
@@ -120,7 +118,7 @@ export function useLimiteGlobalFiados({
         if (config.inventoryValue) setInventoryValue(config.inventoryValue);
         if (config.monthlyCashFlow) setMonthlyCashFlow(config.monthlyCashFlow);
         if (config.percentage) setPercentage(config.percentage);
-        if (config.customLimit !== undefined) setCustomLimit(config.customLimit);
+        if (config.customLimit !== undefined) setCustomLimitState(config.customLimit);
       }
     } catch {
       // Ignorar errores de parsing

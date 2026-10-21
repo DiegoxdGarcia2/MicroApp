@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Producto } from '../../db/types';
+import type { Producto } from '../../db/types';
 import { validateProduct } from '../inventario/inventarioUtils';
-import { Card, CardHeader, btn-primary, btn-secondary, input-field } from '../../components/layout/Layout';
-import { btn-secondary, btn-primary } from '../../components/layout/Layout'; // These are actually classes
 
 interface ProductoFormModalProps {
   isOpen: boolean;
@@ -61,7 +59,7 @@ export function ProductoFormModal({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    let parsedValue = value;
+    let parsedValue: string | number = value;
     
     if (type === 'number') {
       parsedValue = value === '' ? 0 : Number(value);
@@ -76,7 +74,7 @@ export function ProductoFormModal({
   const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name } = e.target;
     setTouched(prev => ({ ...prev, [name]: true }));
-    validateField(name, formData[name]);
+    validateField(name, formData[name as keyof Producto]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

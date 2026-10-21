@@ -26,7 +26,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt.buffer as ArrayBuffer,
       iterations: 100000,
       hash: 'SHA-256',
     },
@@ -121,7 +121,7 @@ export async function encryptCIPhoto(
     
     // 6. Encriptar datos
     const encryptedData = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
       key,
       imageData
     );
@@ -165,7 +165,7 @@ export async function decryptCIPhoto(
     
     // 3. Desencriptar datos
     const decryptedData = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv.buffer as ArrayBuffer },
       key,
       encryptedData
     );

@@ -1,4 +1,4 @@
-import type { CuentaPorCobrar, MovimientoCobro, GastoTurno } from '../../db/types';
+import type { CuentaPorCobrar, MovimientoCobro } from '../../db/types';
 import { generateWhatsAppUrl } from '../venta/ventaUtils';
 
 export interface PaymentResult {
@@ -36,17 +36,15 @@ export function applyPayment(
   notas: string
 ): { cuenta: any; movimiento: any } {
   const nuevoSaldo = Math.max(0, cuenta.saldo_pendiente - monto);
-  const nuevoEstado = 
-    nuevoSaldo === 0 ? 'PAGADO' : 
-    nuevoSaldo < cuenta.monto_total ? 'PARCIAL' : 
-    cuenta.estado;
+  const nuevoEstado =
+    nuevoSaldo === 0 ? 'PAGADO'
+    : nuevoSaldo < cuenta.monto_total ? 'PARCIAL'
+    : cuenta.estado;
 
   const cuentaActualizada = {
     ...cuenta,
     saldo_pendiente: nuevoSaldo,
-    estado: nuevoSaldo === 0 ? 'PAGADO' : 
-      nuevoSaldo < cuenta.monto_total ? 'PARCIAL' : 
-      cuenta.estado,
+    estado: nuevoEstado,
     actualizado_en: new Date().toISOString(),
   };
 
@@ -54,9 +52,9 @@ export function applyPayment(
     id: crypto.randomUUID(),
     cuenta_cobrar_id: cuenta.id,
     monto,
-    metodo: 'EFECTIVO' as const,
+    metodo,
     fecha: new Date().toISOString(),
-    notas: 'Pago aplicado',
+    notas: notas.trim() || 'Pago aplicado',
   };
 
   return { cuenta: cuentaActualizada, movimiento };
@@ -71,16 +69,17 @@ export function getAccountStatus(cuenta: {
   fecha_vencimiento?: string 
 }): 'PENDIENTE' | 'PARCIAL' | 'PAGADO' | 'VENCIDO' {
   if (cuenta.saldo_pendiente === 0) return 'PAGADO';
-  if (cuenta.saldo_pendiente < cuenta.monto_total) return 'PARCIAL';
-  
-  // Verificar si está vencida
+
+  // Vencida tiene prioridad sobre PARCIAL: si la fecha pasó y aún debe, está vencida
   if (cuenta.fecha_vencimiento) {
     const hoy = new Date().toISOString().split('T')[0];
     if (cuenta.fecha_vencimiento < hoy && cuenta.saldo_pendiente > 0) {
       return 'VENCIDO';
     }
   }
-  
+
+  if (cuenta.saldo_pendiente < cuenta.monto_total) return 'PARCIAL';
+
   return 'PENDIENTE';
 }
 
@@ -102,7 +101,7 @@ export function generatePaymentReminder(cuenta: {
 
   return `Hola ${cuenta.cliente_nombre} 👋
 
-Solo un recordatorio amable: tienes un saldo pendiente de ${cuenta.saldo_pendiente.toLocaleString('es-BO')} Bs con vencimiento el ${fechaFormateada}.
+Solo un recordatorio amable: tienes un saldo pendiente de ${montoFormateado} con vencimiento el ${fechaFormateada}.
 
 No te preocupes, sabemos que a veces se nos pasa. Puedes pagar cuando te sea cómodo:
 💵 Efectivo
@@ -137,23 +136,6 @@ export function generateWhatsAppReminderUrl(cuenta: {
     fecha_vencimiento: cuenta.fecha_vencimiento,
   });
   return generateWhatsAppUrl(cuenta.cliente_telefono, message);
-}
-
-/**
- * Genera URL de WhatsApp con mensaje codificado
- */
-function generateWhatsAppUrl(phone: string, message: string): string {
-  const cleanPhone = phone.replace(/[+\s-]/g, '');
-  const encodedMessage = encodeURIComponent(message);
-  return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
-}
-
-/**
- * Formatea monto en Bolivianos
- */
-export function formatBs(amount: number): string {
-  if (amount === 0) return 'Bs 0';
-  return 'Bs ' + amount.toLocaleString('es-BO');
 }
 
 /**
