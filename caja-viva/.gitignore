@@ -45,3 +45,6 @@ Thumbs.db
 # LOGS
 # ============================================
 *.log
+
+# VitePWA dev artifacts
+dev-dist/
