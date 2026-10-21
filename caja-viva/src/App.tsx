@@ -12,6 +12,16 @@ import { useSyncStatus } from './hooks/useSyncStatus';
 
 type Vista = 'dashboard' | 'venta' | 'inventario' | 'fiados';
 
+const VISTAS: Vista[] = ['dashboard', 'venta', 'inventario', 'fiados'];
+
+/** Lee la vista desde la URL: `/#inventario` o `/inventario` (deep link Vercel). */
+function vistaDesdeUrl(): Vista {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '');
+  const candidato = hash || path;
+  return (VISTAS as string[]).includes(candidato) ? (candidato as Vista) : 'dashboard';
+}
+
 function formatHora(iso: string | null): string {
   if (!iso) return '—';
   const fecha = new Date(iso);
@@ -20,7 +30,7 @@ function formatHora(iso: string | null): string {
 }
 
 export default function App() {
-  const [vista, setVista] = useState<Vista>('dashboard');
+  const [vista, setVistaState] = useState<Vista>(() => vistaDesdeUrl());
   const [dbReady, setDbReady] = useState(false);
   const [productosCount, setProductosCount] = useState(0);
   const [ventasCount, setVentasCount] = useState(0);
@@ -29,6 +39,23 @@ export default function App() {
   const [seeding, setSeeding] = useState(false);
   const [demoMsg, setDemoMsg] = useState<string | null>(null);
   const sync = useSyncStatus();
+
+  // Navegación con historial: /#venta, /#inventario, /#fiados y deep links /inventario
+  const setVista = useCallback((nueva: Vista) => {
+    setVistaState(nueva);
+    const destino = nueva === 'dashboard' ? '/' : `/#${nueva}`;
+    window.history.pushState({ vista: nueva }, '', destino);
+  }, []);
+
+  useEffect(() => {
+    const sincronizarVista = () => setVistaState(vistaDesdeUrl());
+    window.addEventListener('popstate', sincronizarVista);
+    window.addEventListener('hashchange', sincronizarVista);
+    return () => {
+      window.removeEventListener('popstate', sincronizarVista);
+      window.removeEventListener('hashchange', sincronizarVista);
+    };
+  }, []);
 
   const loadStats = useCallback(async () => {
     try {
@@ -91,7 +118,7 @@ export default function App() {
 
   if (!dbReady) {
     return (
-      <Layout syncSlot={syncSlot}>
+      <Layout syncSlot={syncSlot} vista={vista} onNavigate={(v) => setVista(v as Vista)}>
         <div className="flex items-center justify-center h-[calc(100vh-80px)]">
           <ThinkingOrb state="processing" size="lg" label="Inicializando base de datos..." />
         </div>
@@ -339,7 +366,7 @@ export default function App() {
   );
 
   return (
-    <Layout syncSlot={syncSlot}>
+    <Layout syncSlot={syncSlot} vista={vista} onNavigate={(v) => setVista(v as Vista)}>
       {vista === 'dashboard' ? renderDashboard() : vista === 'venta' ? <VentaRapidaPage /> : vista === 'inventario' ? <InventarioPage /> : <FiadosPage />}
       {sync.state === 'synced' && sync.lastMessage && <SyncToast message={sync.lastMessage} />}
     </Layout>

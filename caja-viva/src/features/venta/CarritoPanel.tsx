@@ -213,7 +213,6 @@ export function CarritoPanel({
   const [pagos, setPagos] = useState<Array<{ metodo: 'EFECTIVO' | 'QR' | 'FIADO'; monto: number; cliente_fiado_id?: string }>>([
     { metodo: 'EFECTIVO', monto: 0 },
   ]);
-  const [validation, setValidation] = useState<PaymentValidation>({ valid: true, diferencia: 0 });
   const [_clientesFiados] = useState<Array<{ id: string; nombre: string; telefono: string }>>([
     { id: 'cli-1', nombre: 'Juan Pérez', telefono: '+59171234567' },
     { id: 'cli-2', nombre: 'María López', telefono: '+59169876543' },
@@ -241,10 +240,9 @@ export function CarritoPanel({
   }, [pagos]);
 
   const montoPagos = pagos.reduce((s, p) => s + p.monto, 0);
-  const validationResult = validatePayment(total, pagos as any);
-  setValidation(validationResult);
+  const validation = validatePayment(total, pagos as any);
 
-  const pagoCompleto = validationResult.valid && montoPagos === total && total > 0;
+  const pagoCompleto = validation.valid && montoPagos === total && total > 0;
 
   const handleCobrar = useCallback(async () => {
     if (!pagoCompleto) return;
